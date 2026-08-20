@@ -17,11 +17,11 @@
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
+#include <ad7794_emu.h>
 #include "main.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "ad7784_emu.h"
 #include "CircularBuffer.h"
 /* USER CODE END Includes */
 
@@ -121,7 +121,7 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
 {
     if (hspi->Instance == SPI1) {
-        AD7784_Emu_SPI_Error();
+        AD7794_Emu_SPI_Error();
     }
 }
 /* USER CODE END 0 */
@@ -159,14 +159,14 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
-  AD7784_Emu_Init(&hspi1, &cb, RDY_GPIO_Port, RDY_Pin);
+  AD7794_Emu_Init(&hspi1, &cb, RDY_GPIO_Port, RDY_Pin);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	AD7784_Emu_Process();
+	AD7794_Emu_Process();
 	if (cb_pop(&cb, &uart_tx_byte))
 	{
 		HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);

@@ -1,5 +1,5 @@
-#ifndef AD7784_EMU_H
-#define AD7784_EMU_H
+#ifndef AD7794_EMU_H
+#define AD7794_EMU_H
 
 #include "main.h"
 #include <stdint.h>
@@ -11,21 +11,21 @@ extern "C" {
 #endif
 
 /* ===== Rejestry (zgodne z AD778x) ===== */
-#define AD7784_REG_STATUS        0
-#define AD7784_REG_MODE          1
-#define AD7784_REG_CONFIG        2
-#define AD7784_REG_DATA          3
-#define AD7784_REG_ID            4
-#define AD7784_REG_IO            5
-#define AD7784_REG_OFFSET        6
-#define AD7784_REG_FULLSCALE     7
+#define AD7794_REG_STATUS        0
+#define AD7794_REG_MODE          1
+#define AD7794_REG_CONFIG        2
+#define AD7794_REG_DATA          3
+#define AD7794_REG_ID            4
+#define AD7794_REG_IO            5
+#define AD7794_REG_OFFSET        6
+#define AD7794_REG_FULLSCALE     7
 
 /* Status bits */
-#define AD7784_STATUS_RDY        (1 << 7)   /* 0 = data ready */
-#define AD7784_STATUS_ERR        (1 << 6)
-#define AD7784_STATUS_NOREX      (1 << 5)
-#define AD7784_STATUS_PARITY     (1 << 4)
-/* bit 3 zawsze 1 na AD7785, na AD7784 też ustawiamy */
+#define AD7794_STATUS_RDY        (1 << 7)   /* 0 = data ready */
+#define AD7794_STATUS_ERR        (1 << 6)
+#define AD7794_STATUS_NOREX      (1 << 5)
+#define AD7794_STATUS_PARITY     (1 << 4)
+/* bit 3 zawsze 1 na AD7785, na AD7794 też ustawiamy */
 
 typedef struct {
     /* Rejestry */
@@ -58,25 +58,25 @@ typedef struct {
     GPIO_TypeDef      *rdy_port;
     uint16_t           rdy_pin;
     CircularBuffer 	  *pcb;
-} AD7784_Emu_t;
+} AD7794_Emu_t;
 
-extern AD7784_Emu_t ad7784;
+extern AD7794_Emu_t AD7794;
 
 /* API */
-void AD7784_Emu_Init(SPI_HandleTypeDef *hspi, CircularBuffer *cb,
+void AD7794_Emu_Init(SPI_HandleTypeDef *hspi, CircularBuffer *cb,
                      GPIO_TypeDef *rdy_port, uint16_t rdy_pin);
 
-void AD7784_Emu_Reset(void);
-void AD7784_Emu_Process(void);                 /* wywoływać w main loop */
-void AD7784_Emu_SetData(uint32_t value_24bit); /* stała wartość */
+void AD7794_Emu_Reset(void);
+void AD7794_Emu_Process(void);                 /* wywoływać w main loop */
+void AD7794_Emu_SetData(uint32_t value_24bit); /* stała wartość */
 
 /* Callbacki SPI (wywoływane z interruptów) */
-void AD7784_Emu_SPI_RxTxCplt(void);
-void AD7784_Emu_SPI_Error(void);
-void AD7784_Emu_CS_Falling(void);              /* opcjonalnie – na CS falling */
+void AD7794_Emu_SPI_RxTxCplt(void);
+void AD7794_Emu_SPI_Error(void);
+void AD7794_Emu_CS_Falling(void);              /* opcjonalnie – na CS falling */
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* AD7784_EMU_H */
+#endif /* AD7794_EMU_H */
