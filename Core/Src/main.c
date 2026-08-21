@@ -34,8 +34,6 @@ typedef enum {
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define RDY_GPIO_Port   GPIOA
-#define RDY_Pin         GPIO_PIN_6
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -70,51 +68,78 @@ static void MX_TIM1_Init(void);
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-    /* ========== EEPROM ========== */
-	if (GPIO_Pin == CS_EE_Pin)
-	{
-	    if (HAL_GPIO_ReadPin(CS_EE_GPIO_Port, CS_EE_Pin) == GPIO_PIN_RESET)
-	    {
-	        active_device = DEV_EEPROM_ACTIVE;
-	        cb_push(&cb, 'E');
-	    }
-	    else
-	    {
-	        if (active_device == DEV_EEPROM_ACTIVE)
-	        {
-	            active_device = DEV_IDLE;
-	            cb_push(&cb, '\r');
-	        }
-	    }
-	}
+    if (GPIO_Pin == CS_EE_Pin)
+    {
+        GPIO_PinState cs = HAL_GPIO_ReadPin(CS_EE_GPIO_Port, CS_EE_Pin);
 
+        if (cs == GPIO_PIN_RESET)
+        {
+            /*
+             * EEPROM została wybrana.
+             *
+             * ADC musi być całkowicie odłączony od MISO.
+             */
+            active_device = DEV_EEPROM_ACTIVE;
 
-    /* ========== ADC – bez zmian koncepcyjnych ========== */
-	if (GPIO_Pin == CS_ADC_Pin)
-	{
-	    if (HAL_GPIO_ReadPin(CS_ADC_GPIO_Port, CS_ADC_Pin) == GPIO_PIN_RESET)
-	    {
-	        active_device = DEV_ADC_ACTIVE;
-	        cb_push(&cb, 'A');
-	    }
-	    else
-	    {
-	        if (active_device == DEV_ADC_ACTIVE)
-	        {
-	            active_device = DEV_IDLE;
-	            cb_push(&cb, '\r');
-	        }
-	    }
+            AD7794_Emu_CS_Deactivate();
+
+            cb_push(&cb, 'E');
+        }
+        else
+        {
+            if (active_device == DEV_EEPROM_ACTIVE)
+            {
+                active_device = DEV_IDLE;
+                cb_push(&cb, '\r');
+            }
+        }
+    }
+
+    if (GPIO_Pin == CS_ADC_Pin)
+    {
+        GPIO_PinState cs = HAL_GPIO_ReadPin(CS_ADC_GPIO_Port, CS_ADC_Pin);
+
+        if (cs == GPIO_PIN_RESET)
+        {
+            /*
+             * ADC został wybrany.
+             */
+            active_device = DEV_ADC_ACTIVE;
+
+            AD7794_Emu_CS_Activate();
+
+            cb_push(&cb, 'A');
+        }
+        else
+        {
+            /*
+             * Koniec transakcji ADC.
+             */
+            if (active_device == DEV_ADC_ACTIVE)
+            {
+                AD7784_Emu_CS_Deactivate();
+
+                active_device = DEV_IDLE;
+
+                cb_push(&cb, '\r');
+            }
+        }
     }
 }
 
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 {
-    if (hspi->Instance == SPI1) {   /* dostosuj */
-    	if (active_device == DEV_ADC_ACTIVE)
-    	{
-    		//AD7784_Emu_SPI_RxTxCplt();
-    	}
+    if (hspi->Instance != SPI1)
+        return;
+
+    /*
+     * SPI może zakończyć transfer po zmianie CS.
+     * Dlatego zawsze sprawdzamy rzeczywisty stan CS.
+     */
+    if (HAL_GPIO_ReadPin(CS_ADC_GPIO_Port, CS_ADC_Pin)
+            == GPIO_PIN_RESET)
+    {
+        AD7794_Emu_SPI_RxTxCplt();
     }
 }
 
@@ -159,7 +184,7 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
-  AD7794_Emu_Init(&hspi1, &cb, RDY_GPIO_Port, RDY_Pin);
+  AD7794_Emu_Init(&hspi1, &cb);
   /* USER CODE END 2 */
 
   /* Infinite loop */

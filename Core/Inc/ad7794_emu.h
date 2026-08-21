@@ -60,11 +60,8 @@ typedef struct {
     CircularBuffer 	  *pcb;
 } AD7794_Emu_t;
 
-extern AD7794_Emu_t AD7794;
-
 /* API */
-void AD7794_Emu_Init(SPI_HandleTypeDef *hspi, CircularBuffer *cb,
-                     GPIO_TypeDef *rdy_port, uint16_t rdy_pin);
+void AD7794_Emu_Init(SPI_HandleTypeDef *hspi, CircularBuffer *cb);
 
 void AD7794_Emu_Reset(void);
 void AD7794_Emu_Process(void);                 /* wywoływać w main loop */
