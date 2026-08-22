@@ -74,23 +74,16 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 
         if (cs == GPIO_PIN_RESET)
         {
-            /*
-             * EEPROM została wybrana.
-             *
-             * ADC musi być całkowicie odłączony od MISO.
-             */
-            active_device = DEV_EEPROM_ACTIVE;
-
-            AD7794_Emu_CS_Deactivate();
-
             cb_push(&cb, 'E');
+            active_device = DEV_EEPROM_ACTIVE;
+            AD7794_Emu_CS_Deactivate();
         }
         else
         {
+            cb_push(&cb, 'e');
             if (active_device == DEV_EEPROM_ACTIVE)
             {
                 active_device = DEV_IDLE;
-                cb_push(&cb, '\r');
             }
         }
     }
@@ -101,27 +94,18 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 
         if (cs == GPIO_PIN_RESET)
         {
-            /*
-             * ADC został wybrany.
-             */
-            active_device = DEV_ADC_ACTIVE;
-
-            AD7794_Emu_CS_Activate();
-
             cb_push(&cb, 'A');
+            active_device = DEV_ADC_ACTIVE;
+            AD7794_Emu_CS_Activate();
         }
         else
         {
-            /*
-             * Koniec transakcji ADC.
-             */
+            cb_push(&cb, 'a');
             if (active_device == DEV_ADC_ACTIVE)
             {
                 AD7794_Emu_CS_Deactivate();
 
                 active_device = DEV_IDLE;
-
-                cb_push(&cb, '\r');
             }
         }
     }

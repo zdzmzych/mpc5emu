@@ -164,11 +164,9 @@ static void process_communications_register(uint8_t comm)
     ad7794.next_reg = (comm >> 3) & 0x07u;
     ad7794.cread    = (comm >> 2) & 0x01u;
 
-    if (ad7794.pcb) {
-        /* proste logowanie: R=read, W=write, numer rejestru */
-        cb_push(ad7794.pcb, ad7794.is_read ? 'R' : 'W');
-        cb_push(ad7794.pcb, (uint8_t)('0' + ad7794.next_reg));
-    }
+    /* proste logowanie: R=read, W=write, numer rejestru */
+    cb_push(ad7794.pcb, ad7794.is_read ? 'R' : 'W');
+    cb_push(ad7794.pcb, (uint8_t)('0' + ad7794.next_reg));
 
     if (ad7794.is_read) {
         prepare_tx_buffer();
@@ -204,9 +202,7 @@ static void process_write_data(void)
         ad7794.status |= AD7794_STATUS_RDY;
         ad7794.data_ready = false;
         update_rdy_pin();
-        if (ad7794.pcb) {
-            cb_push(ad7794.pcb, 'M');
-        }
+        cb_push(ad7794.pcb, 'M');
         break;
 
     case AD7794_REG_CONFIG:
@@ -214,9 +210,7 @@ static void process_write_data(void)
         ad7794.status |= AD7794_STATUS_RDY;
         ad7794.data_ready = false;
         update_rdy_pin();
-        if (ad7794.pcb) {
-            cb_push(ad7794.pcb, 'C');
-        }
+        cb_push(ad7794.pcb, 'C');
         break;
 
     case AD7794_REG_IO:
@@ -301,6 +295,7 @@ void AD7794_Emu_Process(void)
 
 void AD7794_Emu_CS_Activate(void)
 {
+    cb_push(ad7794.pcb, 'S');
     ad7794.cs_active = true;
     ad7794.bytes_to_xfer = 0;
     ad7794.byte_idx = 0;
@@ -317,11 +312,9 @@ void AD7794_Emu_CS_Activate(void)
 
 void AD7794_Emu_CS_Deactivate(void)
 {
+    cb_push(ad7794.pcb, 's');
     ad7794.cs_active = false;
-
-    if (ad7794.hspi) {
-        HAL_SPI_Abort_IT(ad7794.hspi);
-    }
+    HAL_SPI_Abort_IT(ad7794.hspi);
 
     ad7794.bytes_to_xfer = 0;
     ad7794.byte_idx = 0;
