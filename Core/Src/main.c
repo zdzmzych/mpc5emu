@@ -117,7 +117,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
              */
             if (active_device == DEV_ADC_ACTIVE)
             {
-                AD7784_Emu_CS_Deactivate();
+                AD7794_Emu_CS_Deactivate();
 
                 active_device = DEV_IDLE;
 
