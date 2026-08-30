@@ -29,6 +29,18 @@ extern "C" {
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f0xx_hal.h"
 
+#include "stm32f0xx_ll_spi.h"
+#include "stm32f0xx_ll_usart.h"
+#include "stm32f0xx_ll_rcc.h"
+#include "stm32f0xx_ll_system.h"
+#include "stm32f0xx_ll_gpio.h"
+#include "stm32f0xx_ll_exti.h"
+#include "stm32f0xx_ll_bus.h"
+#include "stm32f0xx_ll_cortex.h"
+#include "stm32f0xx_ll_utils.h"
+#include "stm32f0xx_ll_pwr.h"
+#include "stm32f0xx_ll_dma.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -53,23 +65,25 @@ extern "C" {
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
-
+void Adc_Pin_Changed(void);
+void Ee_Pin_Changed(void);
+uint8_t mpc5_update_spi(uint8_t data);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define B1_Pin GPIO_PIN_13
+#define B1_Pin LL_GPIO_PIN_13
 #define B1_GPIO_Port GPIOC
-#define CS_ADC_Pin GPIO_PIN_0
+#define CS_ADC_Pin LL_GPIO_PIN_0
 #define CS_ADC_GPIO_Port GPIOA
 #define CS_ADC_EXTI_IRQn EXTI0_1_IRQn
-#define CS_EE_Pin GPIO_PIN_1
+#define CS_EE_Pin LL_GPIO_PIN_1
 #define CS_EE_GPIO_Port GPIOA
 #define CS_EE_EXTI_IRQn EXTI0_1_IRQn
-#define LD2_Pin GPIO_PIN_5
+#define LD2_Pin LL_GPIO_PIN_5
 #define LD2_GPIO_Port GPIOA
-#define TMS_Pin GPIO_PIN_13
+#define TMS_Pin LL_GPIO_PIN_13
 #define TMS_GPIO_Port GPIOA
-#define TCK_Pin GPIO_PIN_14
+#define TCK_Pin LL_GPIO_PIN_14
 #define TCK_GPIO_Port GPIOA
 
 /* USER CODE BEGIN Private defines */

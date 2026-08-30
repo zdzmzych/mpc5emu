@@ -41,7 +41,11 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
+#define SPI_RX_BUFFER_SIZE 16 // Twoje 'N'
 
+volatile uint8_t spi_rx_buffer[SPI_RX_BUFFER_SIZE];
+volatile uint16_t spi_rx_index = 0;
+volatile uint8_t spi_rx_complete = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -55,8 +59,7 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
-extern SPI_HandleTypeDef hspi1;
-extern TIM_HandleTypeDef htim1;
+
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -149,25 +152,23 @@ void EXTI0_1_IRQHandler(void)
   /* USER CODE BEGIN EXTI0_1_IRQn 0 */
 
   /* USER CODE END EXTI0_1_IRQn 0 */
-  HAL_GPIO_EXTI_IRQHandler(CS_ADC_Pin);
-  HAL_GPIO_EXTI_IRQHandler(CS_EE_Pin);
+  if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_0) != RESET)
+  {
+    LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_0);
+    /* USER CODE BEGIN LL_EXTI_LINE_0 */
+    Adc_Pin_Changed();
+    /* USER CODE END LL_EXTI_LINE_0 */
+  }
+  if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_1) != RESET)
+  {
+    LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_1);
+    /* USER CODE BEGIN LL_EXTI_LINE_1 */
+    Ee_Pin_Changed();
+    /* USER CODE END LL_EXTI_LINE_1 */
+  }
   /* USER CODE BEGIN EXTI0_1_IRQn 1 */
 
   /* USER CODE END EXTI0_1_IRQn 1 */
-}
-
-/**
-  * @brief This function handles TIM1 break, update, trigger and commutation interrupts.
-  */
-void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
-{
-  /* USER CODE BEGIN TIM1_BRK_UP_TRG_COM_IRQn 0 */
-
-  /* USER CODE END TIM1_BRK_UP_TRG_COM_IRQn 0 */
-  HAL_TIM_IRQHandler(&htim1);
-  /* USER CODE BEGIN TIM1_BRK_UP_TRG_COM_IRQn 1 */
-
-  /* USER CODE END TIM1_BRK_UP_TRG_COM_IRQn 1 */
 }
 
 /**
@@ -176,9 +177,28 @@ void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
 void SPI1_IRQHandler(void)
 {
   /* USER CODE BEGIN SPI1_IRQn 0 */
+    // Sprawdzenie, czy bufor odbiorczy nie jest pusty i czy przerwanie jest włączone
+    if (LL_SPI_IsActiveFlag_RXNE(SPI1) && LL_SPI_IsEnabledIT_RXNE(SPI1))
+    {
+        // Odczyt danych (automatycznie czyści flagę RXNE)
+        uint8_t received_byte = LL_SPI_ReceiveData8(SPI1);
+        mpc5_update_spi(received_byte);
 
+        /*
+        if (spi_rx_complete == 0)
+        {
+            spi_rx_buffer[spi_rx_index++] = received_byte;
+
+            if (spi_rx_index >= SPI_RX_BUFFER_SIZE)
+            {
+                // Odebrano N bajtów - wyłączamy przerwanie
+                LL_SPI_DisableIT_RXNE(SPI1);
+                spi_rx_complete = 1;
+            }
+        }
+        */
+    }
   /* USER CODE END SPI1_IRQn 0 */
-  HAL_SPI_IRQHandler(&hspi1);
   /* USER CODE BEGIN SPI1_IRQn 1 */
 
   /* USER CODE END SPI1_IRQn 1 */

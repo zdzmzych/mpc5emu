@@ -12,71 +12,29 @@ AD7794_Emu_t ad7794;
 #define AD7794_DEFAULT_OFFSET     0x800000u
 #define AD7794_DEFAULT_FULLSCALE  0x5A5A5Au
 
-/* PA6 = SPI1_MISO / DOUT/RDY */
-static void PA6_HiZ(void)
-{
-    GPIO_InitTypeDef g = {0};
-    g.Pin  = GPIO_PIN_6;
-    g.Mode = GPIO_MODE_INPUT;
-    g.Pull = GPIO_NOPULL;
-    HAL_GPIO_Init(GPIOA, &g);
-}
-
 static void PA6_As_RDY(void)
 {
-    GPIO_InitTypeDef g = {0};
-
-    /* wartość przed przełączeniem trybu */
-    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6,
-                      ad7794.data_ready ? GPIO_PIN_RESET : GPIO_PIN_SET);
-
-    g.Pin   = GPIO_PIN_6;
-    g.Mode  = GPIO_MODE_OUTPUT_PP;
-    g.Pull  = GPIO_NOPULL;
-    g.Speed = GPIO_SPEED_FREQ_HIGH;
-    HAL_GPIO_Init(GPIOA, &g);
-
-    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6,
-                      ad7794.data_ready ? GPIO_PIN_RESET : GPIO_PIN_SET);
+	LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_6, LL_GPIO_MODE_OUTPUT);
+	LL_GPIO_SetOutputPin(GPIOA, LL_GPIO_PIN_6);
 }
 
 static void PA6_As_MISO(void)
 {
-    GPIO_InitTypeDef g = {0};
-    g.Pin       = GPIO_PIN_6;
-    g.Mode      = GPIO_MODE_AF_PP;
-    g.Pull      = GPIO_NOPULL;
-    g.Speed     = GPIO_SPEED_FREQ_HIGH;
-    g.Alternate = GPIO_AF0_SPI1;
-    HAL_GPIO_Init(GPIOA, &g);
+	 LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_6, LL_GPIO_MODE_ALTERNATE);
 }
 
 static void update_rdy_pin(void)
 {
-    if (!ad7794.cs_active) {
-        PA6_HiZ();
+    if (!ad7794.cs_active)
         return;
-    }
     PA6_As_RDY();
-}
-
-static bool spi_cs_is_active(void)
-{
-    return (HAL_GPIO_ReadPin(CS_ADC_GPIO_Port, CS_ADC_Pin) == GPIO_PIN_RESET);
 }
 
 static void spi_start_rx_tx(uint16_t n)
 {
-    if (!spi_cs_is_active() || ad7794.hspi == NULL) {
-        return;
-    }
-
-    /* zabezpieczenie przed double-start */
-    if (ad7794.hspi->State != HAL_SPI_STATE_READY) {
-        HAL_SPI_Abort(ad7794.hspi);
-    }
-
-    HAL_SPI_TransmitReceive_IT(ad7794.hspi, ad7794.tx_buf, ad7794.rx_buf, n);
+	ad7794.bytes_to_read = n;
+	(void)LL_SPI_ReceiveData8(SPI1);
+    LL_SPI_EnableIT_RXNE(SPI1);
 }
 
 static void prepare_tx_buffer(void)
@@ -165,8 +123,8 @@ static void process_communications_register(uint8_t comm)
     ad7794.cread    = (comm >> 2) & 0x01u;
 
     /* proste logowanie: R=read, W=write, numer rejestru */
-    cb_push(ad7794.pcb, ad7794.is_read ? 'R' : 'W');
-    cb_push(ad7794.pcb, (uint8_t)('0' + ad7794.next_reg));
+    //cb_push(ad7794.pcb, ad7794.is_read ? 'R' : 'W');
+    //cb_push(ad7794.pcb, (uint8_t)('0' + ad7794.next_reg));
 
     if (ad7794.is_read) {
         prepare_tx_buffer();
@@ -202,7 +160,7 @@ static void process_write_data(void)
         ad7794.status |= AD7794_STATUS_RDY;
         ad7794.data_ready = false;
         update_rdy_pin();
-        cb_push(ad7794.pcb, 'M');
+        //cb_push(ad7794.pcb, 'M');
         break;
 
     case AD7794_REG_CONFIG:
@@ -210,7 +168,7 @@ static void process_write_data(void)
         ad7794.status |= AD7794_STATUS_RDY;
         ad7794.data_ready = false;
         update_rdy_pin();
-        cb_push(ad7794.pcb, 'C');
+        //cb_push(ad7794.pcb, 'C');
         break;
 
     case AD7794_REG_IO:
@@ -250,10 +208,9 @@ void AD7794_Emu_Reset(void)
     ad7794.bytes_to_xfer = 0;
     ad7794.byte_idx   = 0;
 
-    if (ad7794.cs_active) {
+    if (ad7794.cs_active)
+    {
         PA6_As_RDY();
-    } else {
-        PA6_HiZ();
     }
 }
 
@@ -262,21 +219,15 @@ void AD7794_Emu_SetData(uint32_t value_24bit)
     ad7794.data = value_24bit & 0xFFFFFFu;
 }
 
-void AD7794_Emu_Init(SPI_HandleTypeDef *hspi, CircularBuffer *cb)
+void AD7794_Emu_Init()
 {
     memset(&ad7794, 0, sizeof(ad7794));
-
-    ad7794.hspi = hspi;
-    ad7794.pcb  = cb;
 
     AD7794_Emu_Reset();
     AD7794_Emu_SetData(0x123456u);
 
     ad7794.conversion_period_ms = 50;   /* ~20 Hz – dostosuj */
     ad7794.cs_active = false;
-
-    PA6_HiZ();
-    /* NIE startujemy SPI IT dopóki CS nie spadnie */
 }
 
 void AD7794_Emu_Process(void)
@@ -286,6 +237,8 @@ void AD7794_Emu_Process(void)
     if ((now - ad7794.last_conversion_tick) >= ad7794.conversion_period_ms) {
         ad7794.last_conversion_tick = now;
 
+        if(!ad7794.cs_active)
+        	return;
         /* konwersja zakończona → RDY = 0 */
         ad7794.status &= (uint8_t)~AD7794_STATUS_RDY;
         ad7794.data_ready = true;
@@ -295,13 +248,11 @@ void AD7794_Emu_Process(void)
 
 void AD7794_Emu_CS_Activate(void)
 {
-    cb_push(ad7794.pcb, 'S');
     ad7794.cs_active = true;
     ad7794.bytes_to_xfer = 0;
     ad7794.byte_idx = 0;
     ad7794.ff_count = 0;
 
-    /* Na starcie transakcji DOUT/RDY = RDY */
     PA6_As_RDY();
 
     ad7794.tx_buf[0] = 0xFF;
@@ -312,26 +263,16 @@ void AD7794_Emu_CS_Activate(void)
 
 void AD7794_Emu_CS_Deactivate(void)
 {
-    cb_push(ad7794.pcb, 's');
     ad7794.cs_active = false;
-    HAL_SPI_Abort_IT(ad7794.hspi);
 
     ad7794.bytes_to_xfer = 0;
     ad7794.byte_idx = 0;
     ad7794.cread = 0;
-
-    /* Odłączenie od magistrali */
-    PA6_HiZ();
 }
 
-void AD7794_Emu_SPI_RxTxCplt(void)
+void AD7794_Emu_SPI_RxTxCplt(uint8_t data)
 {
-    if (!spi_cs_is_active()) {
-        ad7794.cs_active = false;
-        PA6_HiZ();
-        return;
-    }
-
+	process_communications_register(data);
     /* ----- Communications Register (oczekujemy 1 bajtu) ----- */
     if (ad7794.bytes_to_xfer == 0) {
         uint8_t comm = ad7794.rx_buf[0];
@@ -388,11 +329,4 @@ void AD7794_Emu_SPI_RxTxCplt(void)
 void AD7794_Emu_SPI_Error(void)
 {
     ad7794.bytes_to_xfer = 0;
-
-    if (spi_cs_is_active()) {
-        PA6_As_RDY();
-        spi_start_rx_tx(1);
-    } else {
-        PA6_HiZ();
-    }
 }

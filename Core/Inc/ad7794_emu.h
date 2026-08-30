@@ -4,7 +4,6 @@
 #include "main.h"
 #include <stdint.h>
 #include <stdbool.h>
-#include "CircularBuffer.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,6 +42,7 @@ typedef struct {
     uint8_t  is_read;
     uint8_t  cread;
     uint8_t  bytes_to_xfer;
+    uint8_t  bytes_to_read;
     uint8_t  byte_idx;
     uint8_t  ff_count;      /* soft-reset: licznik 0xFF */
 
@@ -56,14 +56,12 @@ typedef struct {
     bool     cs_active;
 
     /* Hardware */
-    SPI_HandleTypeDef *hspi;
-    CircularBuffer    *pcb;
 } AD7794_Emu_t;
 
 extern AD7794_Emu_t ad7794;
 
 /* API */
-void AD7794_Emu_Init(SPI_HandleTypeDef *hspi, CircularBuffer *cb);
+void AD7794_Emu_Init();
 void AD7794_Emu_Reset(void);
 void AD7794_Emu_Process(void);
 void AD7794_Emu_SetData(uint32_t value_24bit);
@@ -73,7 +71,7 @@ void AD7794_Emu_CS_Activate(void);
 void AD7794_Emu_CS_Deactivate(void);
 
 /* Callbacki SPI */
-void AD7794_Emu_SPI_RxTxCplt(void);
+void AD7794_Emu_SPI_RxTxCplt(uint8_t data);
 void AD7794_Emu_SPI_Error(void);
 
 #ifdef __cplusplus

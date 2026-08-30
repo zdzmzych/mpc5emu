@@ -1,46 +1,32 @@
-/*
- * CircularBuffer.c
- *
- *  Created on: 31 lip 2026
- *      Author: mzych
- */
-
-
 #include "CircularBuffer.h"
 
+#define BUFFER_SIZE 128 // Musi być potęgą dwójki (2, 4, 8, 16, 32, 64, 128, 256...)
+#define BUFFER_MASK (BUFFER_SIZE - 1)
 
+uint8_t data[BUFFER_SIZE];
+volatile uint16_t head; // Indeks dopisywania (zwiększany przez SPI)
+volatile uint16_t tail; // Indeks odczytu (zwiększany przez UART)
 
-// Funkcja dodająca pojedynczy bajt (wywoływana w przerwaniu SPI)
-bool cb_push(CircularBuffer *cb, uint8_t byte) {
-    uint16_t next_head = (cb->head + 1) & BUFFER_MASK;
+bool cb_push(uint8_t byte) {
+    uint16_t next_head = (head + 1) & BUFFER_MASK;
 
     // Sprawdzenie, czy bufor nie jest pełny
-    if (next_head == cb->tail) {
+    if (next_head == tail) {
         return false; // Przepełnienie bufora (błąd, brak miejsca)
     }
 
-    cb->data[cb->head] = byte;
-    cb->head = next_head;
+    data[head] = byte;
+    head = next_head;
     return true;
 }
 
-// Funkcja pobierająca pojedynczy bajt (wywoływana w pętli głównej)
-bool cb_pop(CircularBuffer *cb, uint8_t *byte) {
-    // Sprawdzenie, czy bufor jest pusty
-    if (cb->head == cb->tail) {
+bool cb_pop(uint8_t *byte) {
+    if (head == tail) {
         return false;
     }
 
-    *byte = cb->data[cb->tail];
-    cb->tail = (cb->tail + 1) & BUFFER_MASK;
+    *byte = data[tail];
+    tail = (tail + 1) & BUFFER_MASK;
     return true;
-}
-
-bool cb_pusha(CircularBuffer *cb, uint8_t *bytes, uint8_t count)
-{
-	for(int i=0; i<count;i++)
-	{
-		cb_push(cb, bytes[i]);
-	}
 }
 
