@@ -1,144 +1,268 @@
 #include "main.h"
+#include "ee_emul.h"
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
 
-typedef enum {
-	SPI_STATE_IDLE = 0,
-	SPI_STATE_WANT_CMD,
-	SPI_STATE_WANT_ADDRESS,
-	SPI_STATE_DATA_TRANSFER
-} Spi_State_t;
+#define EE_DATA_SIZE               16u
 
-#define EEPROM_SIZE 0x200 // 25LC320 first page
-#define PACKET_SIZE 0x20
-// Instrukcje pamięci 25LC320
-#define EEPROM_CMD_WREN  0x06  // Write Enable
-#define EEPROM_CMD_WRDI  0x04  // Write Disable
-#define EEPROM_CMD_RDSR  0x05  // Read Status Register
-#define EEPROM_CMD_WRSR  0x01  // Write Status Register
-#define EEPROM_CMD_READ  0x03  // Read Data
-#define EEPROM_CMD_WRITE 0x02  // Write Data
+#define EE_CMD_WRITE               0x02u
+#define EE_CMD_READ                0x03u
 
-uint8_t __attribute__((aligned(4))) eeprom_memory[] = { 0x50, 0x97, 0x5C, 0xEF,
-		0xC1, 0x8F, 0x05, 0x8B, 0x0E, 0x8D, 0xD8, 0xF5, 0xAE, 0x89, 0xB8, 0x09,
-		0x0D, 0x8A, 0xC9, 0x0A, 0x48, 0x84, 0x00, 0x00, 0x1A, 0x97, 0xAD, 0x40,
-		0xED, 0x91, 0xC9, 0xBE, 0xD2, 0x8B, 0xBA, 0x1A, 0x5E, 0x87, 0x4D, 0x03,
-		0x4F, 0x8A, 0xE1, 0x9C, 0x48, 0x84, 0x00, 0x00, 0x60, 0x9D, 0x00, 0xCC,
-		0xAA, 0x9A, 0xCD, 0x3A, 0x70, 0x93, 0xD5, 0x66, 0x31, 0x94, 0xA3, 0xA7,
-		0x30, 0x97, 0x4A, 0x56, 0xE8, 0x98, 0xD0, 0x43, 0x2F, 0x97, 0x16, 0x6A,
-		0x50, 0x93, 0xFB, 0x12, 0x61, 0x93, 0x11, 0x30, 0x7F, 0x96, 0xB5, 0xED,
-		0x5D, 0x75, 0x4C, 0xF7, 0xB1, 0x76, 0x37, 0x3E, 0xD1, 0x78, 0x48, 0x16,
-		0x00, 0x80, 0xA7, 0xE1, 0x64, 0x4B, 0x2E, 0xF9, 0xA5, 0x7E, 0xD3, 0x8B,
-		0xED, 0x7A, 0x43, 0xC5, 0x39, 0x79, 0x32, 0x04, 0x7F, 0x7F, 0x9F, 0xFE,
-		0x25, 0x7E, 0xD3, 0x8B, 0x6D, 0x7A, 0x43, 0xC5, 0xB9, 0x79, 0x32, 0x04,
-		0x30, 0x70, 0x77, 0xB1, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x83, 0x75, 0xAD, 0x37,
-		0x0A, 0x8D, 0x42, 0x25, 0xFF, 0xFF, 0xFF, 0xFF, 0x2F, 0x89, 0x00, 0x00,
-		0xAF, 0x89, 0x00, 0x00, 0x06, 0x00, 0x18, 0xA1, 0x60, 0x0C, 0x3A, 0x7F,
-		0x35, 0x5E, 0xBA, 0x7F, 0x35, 0x5E, 0x18, 0x79, 0xB1, 0xC3, 0x02, 0x00,
-		0x06, 0xFF, 0x08, 0x8A, 0x00, 0x80, 0x88, 0x8A, 0x00, 0x80, 0x16, 0x86,
-		0x00, 0x00, 0xC8, 0x84, 0x00, 0x00, 0x50, 0x95, 0xE7, 0x86, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF, 0x7E, 0xDB, 0x70, 0x81, 0x0E, 0x4F, 0x84, 0x4C,
-		0x83, 0xD6, 0x7D, 0xA2, 0x4F, 0xDB, 0xC4, 0x1D, 0x63, 0x00, 0x19, 0x02,
-		0x1A, 0x80, 0x80, 0x02, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x04,
-		0xFF, 0xFF, 0xC7, 0xE2 };
+/*
+ * 25LC320 = 4096 bytes
+ */
+#define EE_MEMORY_SIZE             0x1000u
 
-volatile Spi_State_t spi_state = SPI_STATE_IDLE;
-volatile uint8_t eeprom_cmd = 0;
-volatile uint16_t eeprom_addr = 0;
-volatile uint8_t  eeprom_status  = 0x00;   // bit1 = WEL
-uint8_t rx_raw_buffer[PACKET_SIZE];
-uint8_t tx_raw_buffer[PACKET_SIZE];
-
-void ProcessEepromActive(void)
+typedef enum
 {
-    switch (spi_state)
+    EE_SPI_IDLE = 0,
+    EE_SPI_WAIT_CMD,
+    EE_SPI_WAIT_ADDRESS_HIGH,
+    EE_SPI_WAIT_ADDRESS_LOW,
+    EE_SPI_WRITE_DATA,
+    EE_SPI_READ_DATA,
+    EE_SPI_WAIT_END
+
+} EE_SpiState_t;
+
+static uint8_t eeprom_memory[EE_MEMORY_SIZE];
+
+static volatile EE_SpiState_t ee_state;
+static volatile uint8_t ee_cmd;
+static volatile uint16_t ee_address;
+static volatile uint8_t ee_data_index;
+static volatile bool ee_cs_active;
+
+static const uint8_t eeprom_default_image[0x200] =
+{
+    /* TU WSTAW DOKŁADNIE ISTNIEJĄCY INITIALIZER
+       z obecnego ee_emul.c */
+};
+
+typedef enum
+{
+    EE_STATE_WAIT_COMMAND,
+    EE_STATE_WAIT_ADDR_H,
+    EE_STATE_WAIT_ADDR_L,
+    EE_STATE_WRITE,
+    EE_STATE_READ,
+} EE_StateInternal_t;
+
+static volatile EE_StateInternal_t state;
+
+static void EE_Tx(uint8_t value)
+{
+    if (LL_SPI_IsActiveFlag_TXE(SPI1))
     {
-    case SPI_STATE_WANT_CMD:
-    {
-        eeprom_cmd = rx_raw_buffer[0];
-
-        switch (eeprom_cmd)
-        {
-        case EEPROM_CMD_WREN:
-            eeprom_status |= 0x02;          // WEL = 1
-            spi_state = SPI_STATE_DATA_TRANSFER; // czekamy na CS↑
-            break;
-
-        case EEPROM_CMD_WRDI:
-            eeprom_status &= ~0x02;
-            spi_state = SPI_STATE_DATA_TRANSFER;
-            break;
-
-        case EEPROM_CMD_RDSR:
-            tx_raw_buffer[0] = eeprom_status;
-            spi_state = SPI_STATE_DATA_TRANSFER;
-            break;
-
-        case EEPROM_CMD_READ:
-        case EEPROM_CMD_WRITE:
-            spi_state = SPI_STATE_WANT_ADDRESS;
-            eeprom_addr = LL_SPI_ReceiveData16(SPI1);
-            break;
-
-        default:
-            /* nieznana komenda – czekamy na CS↑ */
-            spi_state = SPI_STATE_DATA_TRANSFER;
-            break;
-        }
-        break;
-    }
-
-    case SPI_STATE_WANT_ADDRESS:
-    {
-        eeprom_addr = ((uint16_t)rx_raw_buffer[0] << 8) | rx_raw_buffer[1];
-        eeprom_addr &= (EEPROM_SIZE - 1);
-
-        spi_state = SPI_STATE_DATA_TRANSFER;
-
-        if (eeprom_cmd == EEPROM_CMD_READ)
-        {
-            /* Bezpieczny limit – max BUFFER_SIZE na raz */
-            uint16_t len = EEPROM_SIZE - eeprom_addr;
-            if (len > PACKET_SIZE) len = PACKET_SIZE;
-
-            memcpy(tx_raw_buffer, &eeprom_memory[eeprom_addr], len);
-        }
-        else if (eeprom_cmd == EEPROM_CMD_WRITE)
-        {
-            memset(rx_raw_buffer, 0, PACKET_SIZE);
-        }
-        break;
-    }
-
-    case SPI_STATE_DATA_TRANSFER:
-        /* Transakcja kończy się na CS↑ – nic nie robimy */
-        break;
-
-    default:
-        break;
+        LL_SPI_TransmitData8(SPI1, value);
     }
 }
 
+void EE_Emul_Init(void)
+{
+    memset(eeprom_memory,
+           0xFF,
+           sizeof(eeprom_memory));
+
+    memcpy(eeprom_memory,
+           eeprom_default_image,
+           sizeof(eeprom_default_image));
+
+    state = EE_STATE_WAIT_COMMAND;
+
+    ee_cmd = 0;
+    ee_address = 0;
+    ee_data_index = 0;
+    ee_cs_active = false;
+}
+
+void EE_Emul_CS_Activate(void)
+{
+    ee_cs_active = true;
+
+    state = EE_STATE_WAIT_COMMAND;
+
+    ee_cmd = 0;
+    ee_address = 0;
+    ee_data_index = 0;
+
+    /*
+     * Slave musi mieć coś w TX zanim master zacznie zegar.
+     */
+    EE_Tx(0x00);
+
+    LL_SPI_EnableIT_RXNE(SPI1);
+}
+
+void EE_Emul_CS_Deactivate(void)
+{
+    ee_cs_active = false;
+
+    state = EE_STATE_WAIT_COMMAND;
+
+    ee_cmd = 0;
+    ee_address = 0;
+    ee_data_index = 0;
+
+    LL_SPI_DisableIT_RXNE(SPI1);
+}
+
+uint8_t EE_Emul_Read(uint16_t address)
+{
+    return eeprom_memory[
+        address & (EE_MEMORY_SIZE - 1u)
+    ];
+}
+
+void EE_Emul_Write(uint16_t address, uint8_t value)
+{
+    eeprom_memory[
+        address & (EE_MEMORY_SIZE - 1u)
+    ] = value;
+}
+
+uint8_t EE_Emul_SPI_RxTx(uint8_t rx)
+{
+    uint8_t tx = 0x00;
+
+    if (!ee_cs_active)
+        return 0xFF;
+
+    switch (state)
+    {
+        case EE_STATE_WAIT_COMMAND:
+
+            if (rx == EE_CMD_WRITE || rx == EE_CMD_READ)
+            {
+                ee_cmd = rx;
+                state = EE_STATE_WAIT_ADDR_H;
+            }
+            EE_Tx(0x00);
+            return 0x00;
+
+
+        case EE_STATE_WAIT_ADDR_H:
+
+            ee_address =
+                ((uint16_t)rx << 8);
+
+            state = EE_STATE_WAIT_ADDR_L;
+
+            EE_Tx(0x00);
+            return 0x00;
+
+
+        case EE_STATE_WAIT_ADDR_L:
+
+            ee_address |= rx;
+
+            ee_address &=
+                (EE_MEMORY_SIZE - 1u);
+
+            ee_data_index = 0;
+
+            if (ee_cmd == EE_CMD_WRITE)
+            {
+                state = EE_STATE_WRITE;
+
+                EE_Tx(0x00);
+
+                return 0x00;
+            }
+
+            if (ee_cmd == EE_CMD_READ)
+            {
+                state = EE_STATE_READ;
+
+                /*
+                 * Najważniejszy moment:
+                 *
+                 * po adresie 0x0FF0 przygotowujemy pierwszy
+                 * bajt EEPROM na MISO.
+                 */
+                tx = EE_Emul_Read(ee_address);
+
+                EE_Tx(tx);
+
+                return tx;
+            }
+
+            EE_Tx(0x00);
+
+            return 0x00;
+
+
+        case EE_STATE_WRITE:
+
+            /*
+             * Master:
+             *
+             * 00 01 02 ... 0F
+             */
+            EE_Emul_Write(
+                ee_address,
+                rx);
+
+            ee_address =
+                (uint16_t)(
+                    (ee_address + 1u) &
+                    (EE_MEMORY_SIZE - 1u));
+
+            ee_data_index++;
+
+            EE_Tx(0x00);
+
+            return 0x00;
+
+
+        case EE_STATE_READ:
+
+            /*
+             * rx = FF jest dummy byte.
+             *
+             * TX zawierał już aktualny bajt.
+             */
+
+            tx = EE_Emul_Read(ee_address);
+
+            ee_address =
+                (uint16_t)(
+                    (ee_address + 1u) &
+                    (EE_MEMORY_SIZE - 1u));
+
+            ee_data_index++;
+
+            if (ee_data_index >= EE_DATA_SIZE)
+            {
+                state = EE_STATE_WAIT_COMMAND;
+
+                EE_Tx(0x00);
+            }
+            else
+            {
+                /*
+                 * Przygotuj kolejny bajt.
+                 */
+                EE_Tx(
+                    EE_Emul_Read(
+                        ee_address));
+            }
+
+            return tx;
+
+
+        default:
+
+            state = EE_STATE_WAIT_COMMAND;
+
+            EE_Tx(0x00);
+
+            return 0x00;
+    }
+}
+
+void EE_Emul_Process(void)
+{
+}

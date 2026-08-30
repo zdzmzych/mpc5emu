@@ -26,6 +26,7 @@
 /* USER CODE BEGIN Includes */
 #include "CircularBuffer.h"
 #include "ad7794_emu.h"
+#include "ee_emul.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -77,10 +78,11 @@ void Adc_Pin_Changed(void)
     }
     else
     {
-        /* CS LOW */
+    	 /* CS ADC LOW */
         if (active_device == DEV_EEPROM_ACTIVE)
         {
             active_device = DEV_IDLE;
+            EE_Emul_CS_Deactivate();
             cb_push('\r');
         }
 
@@ -94,21 +96,31 @@ void Ee_Pin_Changed(void)
 {
     if (LL_GPIO_IsInputPinSet(CS_EE_GPIO_Port, CS_EE_Pin))
     {
-    	if(active_device == DEV_EEPROM_ACTIVE)
-    	{
-    		active_device = DEV_IDLE;
-    		cb_push('\r');
-    		AD7794_Emu_CS_Deactivate();
-    	}
+        /* CS EEPROM HIGH */
+
+        if (active_device == DEV_EEPROM_ACTIVE)
+        {
+            EE_Emul_CS_Deactivate();
+
+            active_device = DEV_IDLE;
+
+            cb_push('\r');
+        }
     }
     else
     {
-    	if(active_device == DEV_ADC_ACTIVE)
-    	{
-    		cb_push('\r');
-    	}
-    	active_device = DEV_EEPROM_ACTIVE;
-    	cb_push('E');
+        /* CS EEPROM LOW */
+
+        if (active_device == DEV_ADC_ACTIVE)
+        {
+            AD7794_Emu_CS_Deactivate();
+        }
+
+        active_device = DEV_EEPROM_ACTIVE;
+
+        cb_push('E');
+
+        EE_Emul_CS_Activate();
     }
 }
 
@@ -121,7 +133,7 @@ uint8_t mpc5_update_spi(uint8_t data)
 	}
 	else if (active_device == DEV_EEPROM_ACTIVE)
 	{
-
+		EE_Emul_SPI_RxTx(data);
 	}
 	return 0;
 }
