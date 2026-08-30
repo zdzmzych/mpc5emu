@@ -66,21 +66,27 @@ void Adc_Pin_Changed(void)
 {
     if (LL_GPIO_IsInputPinSet(CS_ADC_GPIO_Port, CS_ADC_Pin))
     {
-    	if(active_device == DEV_ADC_ACTIVE)
-    	{
-    		active_device = DEV_IDLE;
-    		cb_push('\r');
-    	}
+        /* CS HIGH */
+
+        if (active_device == DEV_ADC_ACTIVE)
+        {
+            active_device = DEV_IDLE;
+            AD7794_Emu_CS_Deactivate();
+            cb_push('\r');
+        }
     }
     else
     {
-    	if(active_device == DEV_EEPROM_ACTIVE)
-    	{
-    		cb_push('\r');
-    	}
-    	active_device = DEV_ADC_ACTIVE;
-    	cb_push('A');
-    	AD7794_Emu_CS_Activate();
+        /* CS LOW */
+        if (active_device == DEV_EEPROM_ACTIVE)
+        {
+            active_device = DEV_IDLE;
+            cb_push('\r');
+        }
+
+        active_device = DEV_ADC_ACTIVE;
+        cb_push('A');
+        AD7794_Emu_CS_Activate();
     }
 }
 
@@ -113,7 +119,7 @@ uint8_t mpc5_update_spi(uint8_t data)
 	{
 		AD7794_Emu_SPI_RxTxCplt(data);
 	}
-	else if (active_device =DEV_EEPROM_ACTIVE)
+	else if (active_device == DEV_EEPROM_ACTIVE)
 	{
 
 	}
@@ -153,6 +159,7 @@ int main(void)
   MX_SPI1_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
+  AD7794_Emu_Init();
   LL_SPI_Enable(SPI1);
   /* USER CODE END 2 */
 

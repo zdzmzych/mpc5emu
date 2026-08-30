@@ -1,15 +1,17 @@
+#include "main.h"
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 
 typedef enum {
 	SPI_STATE_IDLE = 0,
 	SPI_STATE_WANT_CMD,
 	SPI_STATE_WANT_ADDRESS,
 	SPI_STATE_DATA_TRANSFER
-} EEprom_State_t;
+} Spi_State_t;
 
 #define EEPROM_SIZE 0x200 // 25LC320 first page
-
+#define PACKET_SIZE 0x20
 // Instrukcje pamięci 25LC320
 #define EEPROM_CMD_WREN  0x06  // Write Enable
 #define EEPROM_CMD_WRDI  0x04  // Write Disable
@@ -63,8 +65,80 @@ uint8_t __attribute__((aligned(4))) eeprom_memory[] = { 0x50, 0x97, 0x5C, 0xEF,
 		0x1A, 0x80, 0x80, 0x02, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x04,
 		0xFF, 0xFF, 0xC7, 0xE2 };
 
-volatile EEprom_State_t eeprom_state = SPI_STATE_IDLE;
+volatile Spi_State_t spi_state = SPI_STATE_IDLE;
 volatile uint8_t eeprom_cmd = 0;
 volatile uint16_t eeprom_addr = 0;
 volatile uint8_t  eeprom_status  = 0x00;   // bit1 = WEL
+uint8_t rx_raw_buffer[PACKET_SIZE];
+uint8_t tx_raw_buffer[PACKET_SIZE];
+
+void ProcessEepromActive(void)
+{
+    switch (spi_state)
+    {
+    case SPI_STATE_WANT_CMD:
+    {
+        eeprom_cmd = rx_raw_buffer[0];
+
+        switch (eeprom_cmd)
+        {
+        case EEPROM_CMD_WREN:
+            eeprom_status |= 0x02;          // WEL = 1
+            spi_state = SPI_STATE_DATA_TRANSFER; // czekamy na CS↑
+            break;
+
+        case EEPROM_CMD_WRDI:
+            eeprom_status &= ~0x02;
+            spi_state = SPI_STATE_DATA_TRANSFER;
+            break;
+
+        case EEPROM_CMD_RDSR:
+            tx_raw_buffer[0] = eeprom_status;
+            spi_state = SPI_STATE_DATA_TRANSFER;
+            break;
+
+        case EEPROM_CMD_READ:
+        case EEPROM_CMD_WRITE:
+            spi_state = SPI_STATE_WANT_ADDRESS;
+            eeprom_addr = LL_SPI_ReceiveData16(SPI1);
+            break;
+
+        default:
+            /* nieznana komenda – czekamy na CS↑ */
+            spi_state = SPI_STATE_DATA_TRANSFER;
+            break;
+        }
+        break;
+    }
+
+    case SPI_STATE_WANT_ADDRESS:
+    {
+        eeprom_addr = ((uint16_t)rx_raw_buffer[0] << 8) | rx_raw_buffer[1];
+        eeprom_addr &= (EEPROM_SIZE - 1);
+
+        spi_state = SPI_STATE_DATA_TRANSFER;
+
+        if (eeprom_cmd == EEPROM_CMD_READ)
+        {
+            /* Bezpieczny limit – max BUFFER_SIZE na raz */
+            uint16_t len = EEPROM_SIZE - eeprom_addr;
+            if (len > PACKET_SIZE) len = PACKET_SIZE;
+
+            memcpy(tx_raw_buffer, &eeprom_memory[eeprom_addr], len);
+        }
+        else if (eeprom_cmd == EEPROM_CMD_WRITE)
+        {
+            memset(rx_raw_buffer, 0, PACKET_SIZE);
+        }
+        break;
+    }
+
+    case SPI_STATE_DATA_TRANSFER:
+        /* Transakcja kończy się na CS↑ – nic nie robimy */
+        break;
+
+    default:
+        break;
+    }
+}
 
