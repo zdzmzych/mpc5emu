@@ -180,23 +180,13 @@ void SPI1_IRQHandler(void)
     // Sprawdzenie, czy bufor odbiorczy nie jest pusty i czy przerwanie jest włączone
     if (LL_SPI_IsActiveFlag_RXNE(SPI1) && LL_SPI_IsEnabledIT_RXNE(SPI1))
     {
-        // Odczyt danych (automatycznie czyści flagę RXNE)
         uint8_t received_byte = LL_SPI_ReceiveData8(SPI1);
         mpc5_update_spi(received_byte);
-
-        /*
-        if (spi_rx_complete == 0)
+        if (LL_SPI_IsActiveFlag_OVR(SPI1))
         {
-            spi_rx_buffer[spi_rx_index++] = received_byte;
-
-            if (spi_rx_index >= SPI_RX_BUFFER_SIZE)
-            {
-                // Odebrano N bajtów - wyłączamy przerwanie
-                LL_SPI_DisableIT_RXNE(SPI1);
-                spi_rx_complete = 1;
-            }
+            (void)LL_SPI_ReceiveData8(SPI1);
+            (void)SPI1->SR;
         }
-        */
     }
   /* USER CODE END SPI1_IRQn 0 */
   /* USER CODE BEGIN SPI1_IRQn 1 */

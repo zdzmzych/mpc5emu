@@ -73,7 +73,7 @@ void Adc_Pin_Changed(void)
         {
             active_device = DEV_IDLE;
             AD7794_Emu_CS_Deactivate();
-            cb_push('\r');
+            cb_push(':');
         }
     }
     else
@@ -83,7 +83,7 @@ void Adc_Pin_Changed(void)
         {
             active_device = DEV_IDLE;
             EE_Emul_CS_Deactivate();
-            cb_push('\r');
+            cb_push(',');
         }
 
         active_device = DEV_ADC_ACTIVE;
@@ -101,10 +101,8 @@ void Ee_Pin_Changed(void)
         if (active_device == DEV_EEPROM_ACTIVE)
         {
             EE_Emul_CS_Deactivate();
-
             active_device = DEV_IDLE;
-
-            cb_push('\r');
+            cb_push(';');
         }
     }
     else
@@ -114,12 +112,11 @@ void Ee_Pin_Changed(void)
         if (active_device == DEV_ADC_ACTIVE)
         {
             AD7794_Emu_CS_Deactivate();
+            cb_push('.');
         }
 
         active_device = DEV_EEPROM_ACTIVE;
-
         cb_push('E');
-
         EE_Emul_CS_Activate();
     }
 }
@@ -171,8 +168,10 @@ int main(void)
   MX_SPI1_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  AD7794_Emu_Init();
   LL_SPI_Enable(SPI1);
+
+  AD7794_Emu_Init();
+  EE_Emul_Init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
