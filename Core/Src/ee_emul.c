@@ -79,6 +79,9 @@ void EE_Emul_Init(void)
     memset(eeprom_memory,
            0xFF,
            sizeof(eeprom_memory));
+    eeprom_memory[4080] = 1;
+    eeprom_memory[4081] = 2;
+    eeprom_memory[4082] = 3;
 
     memcpy(eeprom_memory,
            eeprom_default_image,
@@ -147,7 +150,7 @@ uint8_t EE_Emul_SPI_RxTx(uint8_t rx)
     switch (state)
     {
         case EE_STATE_WAIT_COMMAND:
-
+        	LL_GPIO_SetOutputPin(HLP_GPIO_Port, HLP_Pin);
             if (rx == EE_CMD_WRITE || rx == EE_CMD_READ)
             {
                 ee_cmd = rx;

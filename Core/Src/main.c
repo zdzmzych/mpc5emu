@@ -172,6 +172,7 @@ int main(void)
 
   AD7794_Emu_Init();
   EE_Emul_Init();
+  LL_GPIO_ResetOutputPin(HLP_GPIO_Port, HLP_Pin);
   /* USER CODE END 2 */
 
   /* Infinite loop */

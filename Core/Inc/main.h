@@ -73,6 +73,8 @@ uint8_t mpc5_update_spi(uint8_t data);
 /* Private defines -----------------------------------------------------------*/
 #define B1_Pin LL_GPIO_PIN_13
 #define B1_GPIO_Port GPIOC
+#define HLP_Pin LL_GPIO_PIN_3
+#define HLP_GPIO_Port GPIOC
 #define CS_ADC_Pin LL_GPIO_PIN_0
 #define CS_ADC_GPIO_Port GPIOA
 #define CS_ADC_EXTI_IRQn EXTI0_1_IRQn
