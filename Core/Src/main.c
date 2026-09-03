@@ -125,16 +125,25 @@ void Ee_Pin_Changed(void)
 
 uint8_t mpc5_update_spi(uint8_t data)
 {
-	cb_push(data);
-	if (active_device == DEV_ADC_ACTIVE)
-	{
-		AD7794_Emu_SPI_RxTxCplt(data);
-	}
-	else if (active_device == DEV_EEPROM_ACTIVE)
-	{
-		EE_Emul_SPI_RxTx(data);
-	}
-	return 0;
+    cb_push(data);
+
+    uint8_t tx = 0x00;
+
+    if (active_device == DEV_ADC_ACTIVE)
+    {
+        AD7794_Emu_SPI_RxTxCplt(data);
+    }
+    else if (active_device == DEV_EEPROM_ACTIVE)
+    {
+        tx = EE_Emul_SPI_RxTx(data);
+    }
+
+    if (LL_SPI_IsActiveFlag_TXE(SPI1))
+    {
+        LL_SPI_TransmitData8(SPI1, tx);
+    }
+
+    return tx;
 }
 /* USER CODE END 0 */
 
