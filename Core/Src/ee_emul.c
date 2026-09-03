@@ -66,6 +66,13 @@ typedef enum
 
 static volatile EE_StateInternal_t state;
 
+static void PA6_As_MISO(void)
+{
+    LL_GPIO_SetPinMode(GPIOA,
+                       LL_GPIO_PIN_6,
+                       LL_GPIO_MODE_ALTERNATE);
+}
+
 static void EE_Tx(uint8_t value)
 {
     if (LL_SPI_IsActiveFlag_TXE(SPI1))
@@ -104,6 +111,8 @@ void EE_Emul_CS_Activate(void)
     ee_cmd = 0;
     ee_address = 0;
     ee_data_index = 0;
+
+    PA6_As_MISO();
 
     /*
      * Slave musi mieć coś w TX zanim master zacznie zegar.

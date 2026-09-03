@@ -100,6 +100,7 @@ void Ee_Pin_Changed(void)
 
         if (active_device == DEV_EEPROM_ACTIVE)
         {
+        	LL_GPIO_ResetOutputPin(HLP_GPIO_Port, HLP_Pin);
             EE_Emul_CS_Deactivate();
             active_device = DEV_IDLE;
             cb_push(';');
@@ -116,6 +117,7 @@ void Ee_Pin_Changed(void)
         }
 
         active_device = DEV_EEPROM_ACTIVE;
+        LL_GPIO_SetOutputPin(HLP_GPIO_Port, HLP_Pin);
         cb_push('E');
         EE_Emul_CS_Activate();
     }
