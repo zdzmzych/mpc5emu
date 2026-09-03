@@ -5,35 +5,35 @@
 #include <stdbool.h>
 #include <string.h>
 
-#define EE_DATA_SIZE               16u
+/*
+ * 25LC320
+ *
+ * 32 kbit = 4096 bytes
+ */
+#define EE_MEMORY_SIZE             0x1000u
 
 #define EE_CMD_WRITE               0x02u
 #define EE_CMD_READ                0x03u
 
 /*
- * 25LC320 = 4096 bytes
+ * EEPROM SPI states.
  */
-#define EE_MEMORY_SIZE             0x1000u
-
 typedef enum
 {
-    EE_SPI_IDLE = 0,
-    EE_SPI_WAIT_CMD,
-    EE_SPI_WAIT_ADDRESS_HIGH,
-    EE_SPI_WAIT_ADDRESS_LOW,
-    EE_SPI_WRITE_DATA,
-    EE_SPI_READ_DATA,
-    EE_SPI_WAIT_END
+    EE_STATE_WAIT_COMMAND = 0,
+    EE_STATE_WAIT_ADDR_H,
+    EE_STATE_WAIT_ADDR_L,
+    EE_STATE_WRITE,
+    EE_STATE_READ
 
-} EE_SpiState_t;
+} EE_StateInternal_t;
 
+
+/*
+ * EEPROM contents.
+ */
 static uint8_t eeprom_memory[EE_MEMORY_SIZE];
 
-static volatile EE_SpiState_t ee_state;
-static volatile uint8_t ee_cmd;
-static volatile uint16_t ee_address;
-static volatile uint8_t ee_data_index;
-static volatile bool ee_cs_active;
 
 static const uint8_t eeprom_default_image[0x200] =
 {
@@ -55,17 +55,32 @@ static const uint8_t eeprom_default_image[0x200] =
 		0x0E, 0x4F, 0x84, 0x4C, 0x83, 0xD6, 0x7D, 0xA2, 0x4F, 0xDB, 0xC4, 0x1D, 0x63, 0x00, 0x19, 0x02, 0x1A, 0x80, 0x80, 0x02, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x04, 0xFF, 0xFF, 0x89, 0x7C,
 };
 
-typedef enum
-{
-    EE_STATE_WAIT_COMMAND,
-    EE_STATE_WAIT_ADDR_H,
-    EE_STATE_WAIT_ADDR_L,
-    EE_STATE_WRITE,
-    EE_STATE_READ,
-} EE_StateInternal_t;
 
+
+/*
+ * Current SPI state.
+ */
 static volatile EE_StateInternal_t state;
 
+
+/*
+ * Current EEPROM command/address.
+ */
+static volatile uint8_t  ee_cmd;
+static volatile uint16_t ee_address;
+static volatile bool     ee_cs_active;
+
+
+/*
+ * --------------------------------------------------------------------------
+ * SPI helpers
+ * --------------------------------------------------------------------------
+ */
+
+
+/*
+ * PA6 = SPI1_MISO
+ */
 static void PA6_As_MISO(void)
 {
     LL_GPIO_SetPinMode(GPIOA,
@@ -73,55 +88,133 @@ static void PA6_As_MISO(void)
                        LL_GPIO_MODE_ALTERNATE);
 }
 
-static void EE_Tx(uint8_t value)
+
+/*
+ * Put byte into SPI TX register.
+ *
+ * IMPORTANT:
+ *
+ * This function is called AFTER a received byte has been processed,
+ * therefore the value prepared here will be transmitted during the
+ * NEXT SPI transfer.
+ */
+static void EE_PrepareTx(uint8_t value)
 {
-    while (!LL_SPI_IsActiveFlag_TXE(SPI1))
+    if (LL_SPI_IsActiveFlag_TXE(SPI1))
     {
+        LL_SPI_TransmitData8(SPI1, value);
+    }
+}
+
+
+/*
+ * Clear stale RX / overrun state.
+ *
+ * This is especially important when CS changes between devices.
+ */
+static void EE_SPI_ClearPending(void)
+{
+    if (LL_SPI_IsActiveFlag_RXNE(SPI1))
+    {
+        (void)LL_SPI_ReceiveData8(SPI1);
     }
 
-    LL_SPI_TransmitData8(SPI1, value);
+    if (LL_SPI_IsActiveFlag_OVR(SPI1))
+    {
+        (void)LL_SPI_ReceiveData8(SPI1);
+        (void)SPI1->SR;
+    }
 }
+
+
+/*
+ * --------------------------------------------------------------------------
+ * EEPROM initialization
+ * --------------------------------------------------------------------------
+ */
 
 void EE_Emul_Init(void)
 {
+    /*
+     * Real EEPROM after erase is normally FF.
+     */
     memset(eeprom_memory,
            0xFF,
            sizeof(eeprom_memory));
-    eeprom_memory[4080] = 1;
-    eeprom_memory[4081] = 2;
-    eeprom_memory[4082] = 3;
 
+
+    /*
+     * Load the existing EEPROM image.
+     *
+     * KEEP YOUR EXISTING eeprom_default_image[].
+     */
     memcpy(eeprom_memory,
            eeprom_default_image,
            sizeof(eeprom_default_image));
+
 
     state = EE_STATE_WAIT_COMMAND;
 
     ee_cmd = 0;
     ee_address = 0;
-    ee_data_index = 0;
     ee_cs_active = false;
 }
 
+
+/*
+ * --------------------------------------------------------------------------
+ * CS LOW
+ * --------------------------------------------------------------------------
+ */
+
 void EE_Emul_CS_Activate(void)
 {
+    /*
+     * EEPROM selected.
+     */
     ee_cs_active = true;
 
     state = EE_STATE_WAIT_COMMAND;
 
     ee_cmd = 0;
     ee_address = 0;
-    ee_data_index = 0;
 
-    PA6_As_MISO();
 
     /*
-     * Slave musi mieć coś w TX zanim master zacznie zegar.
+     * Remove anything left by previous SPI transaction.
      */
-    EE_Tx(0x00);
+    EE_SPI_ClearPending();
 
+
+    /*
+     * PA6 becomes MISO.
+     */
+    PA6_As_MISO();
+
+
+    /*
+     * The master is about to send the command.
+     *
+     * We MUST have something already in TX register.
+     *
+     * The first received byte (command) therefore gets 0x00
+     * on MISO.
+     */
+    EE_PrepareTx(0x00);
+
+
+    /*
+     * Receive SPI bytes through interrupt.
+     */
     LL_SPI_EnableIT_RXNE(SPI1);
 }
+
+
+/*
+ * --------------------------------------------------------------------------
+ * CS HIGH
+ * --------------------------------------------------------------------------
+ */
 
 void EE_Emul_CS_Deactivate(void)
 {
@@ -131,10 +224,26 @@ void EE_Emul_CS_Deactivate(void)
 
     ee_cmd = 0;
     ee_address = 0;
-    ee_data_index = 0;
 
+
+    /*
+     * No EEPROM RX processing while CS is inactive.
+     */
     LL_SPI_DisableIT_RXNE(SPI1);
+
+
+    /*
+     * Clear possible RX/OVR left by the last transfer.
+     */
+    EE_SPI_ClearPending();
 }
+
+
+/*
+ * --------------------------------------------------------------------------
+ * EEPROM direct access
+ * --------------------------------------------------------------------------
+ */
 
 uint8_t EE_Emul_Read(uint16_t address)
 {
@@ -143,6 +252,7 @@ uint8_t EE_Emul_Read(uint16_t address)
     ];
 }
 
+
 void EE_Emul_Write(uint16_t address, uint8_t value)
 {
     eeprom_memory[
@@ -150,97 +260,234 @@ void EE_Emul_Write(uint16_t address, uint8_t value)
     ] = value;
 }
 
+
+/*
+ * --------------------------------------------------------------------------
+ * SPI RX/TX
+ *
+ * VERY IMPORTANT:
+ *
+ * This function is called AFTER one complete SPI byte has been received.
+ *
+ * Therefore the value returned from this function is NOT the byte that
+ * was just received.
+ *
+ * It is the byte that must be put into TX for the NEXT SPI transfer.
+ * --------------------------------------------------------------------------
+ */
+
 uint8_t EE_Emul_SPI_RxTx(uint8_t rx)
 {
     uint8_t tx = 0x00;
 
+
     if (!ee_cs_active)
+    {
         return 0xFF;
+    }
+
 
     switch (state)
     {
-    case EE_STATE_WAIT_COMMAND:
+        /*
+         * ==============================================================
+         * COMMAND
+         * ==============================================================
+         */
 
-        if (rx == EE_CMD_WRITE || rx == EE_CMD_READ)
-        {
-            ee_cmd = rx;
-            state = EE_STATE_WAIT_ADDR_H;
-        }
+        case EE_STATE_WAIT_COMMAND:
 
-        return 0x00;
+            if (rx == EE_CMD_READ)
+            {
+                ee_cmd = EE_CMD_READ;
 
+                state = EE_STATE_WAIT_ADDR_H;
 
-    case EE_STATE_WAIT_ADDR_H:
+                /*
+                 * Response to command byte.
+                 */
+                tx = 0x00;
+            }
+            else if (rx == EE_CMD_WRITE)
+            {
+                ee_cmd = EE_CMD_WRITE;
 
-        ee_address = ((uint16_t)rx << 8);
-        state = EE_STATE_WAIT_ADDR_L;
+                state = EE_STATE_WAIT_ADDR_H;
 
-        return 0x00;
+                /*
+                 * Response to command byte.
+                 */
+                tx = 0x00;
+            }
+            else
+            {
+                /*
+                 * Invalid command.
+                 */
+                state = EE_STATE_WAIT_COMMAND;
 
+                tx = 0x00;
+            }
 
-    case EE_STATE_WAIT_ADDR_L:
-
-        ee_address |= rx;
-        ee_address &= (EE_MEMORY_SIZE - 1u);
-
-        ee_data_index = 0;
-
-        if (ee_cmd == EE_CMD_READ)
-        {
-            state = EE_STATE_READ;
-
-            // pierwszy bajt zostanie wysłany podczas
-            // NASTĘPNEGO transferu SPI
-            return EE_Emul_Read(ee_address);
-        }
-
-        if (ee_cmd == EE_CMD_WRITE)
-        {
-            state = EE_STATE_WRITE;
-            return 0x00;
-        }
-
-        return 0x00;
+            break;
 
 
-    case EE_STATE_READ:
+        /*
+         * ==============================================================
+         * ADDRESS HIGH
+         * ==============================================================
+         */
 
-        tx = EE_Emul_Read(ee_address);
+        case EE_STATE_WAIT_ADDR_H:
 
-        ee_address =
-            (ee_address + 1u) &
-            (EE_MEMORY_SIZE - 1u);
+            ee_address =
+                ((uint16_t)rx << 8);
 
-        ee_data_index++;
+            state = EE_STATE_WAIT_ADDR_L;
 
-        if (ee_data_index >= EE_DATA_SIZE)
-        {
+            tx = 0x00;
+
+            break;
+
+
+        /*
+         * ==============================================================
+         * ADDRESS LOW
+         * ==============================================================
+         */
+
+        case EE_STATE_WAIT_ADDR_L:
+
+            ee_address |= rx;
+
+            /*
+             * 25LC320 has 12-bit address.
+             */
+            ee_address &=
+                (EE_MEMORY_SIZE - 1u);
+
+
+            if (ee_cmd == EE_CMD_READ)
+            {
+                /*
+                 * ------------------------------------------------------
+                 * THIS IS THE IMPORTANT FIX.
+                 *
+                 * The first EEPROM byte must be placed into TX NOW,
+                 * before the master starts the next clock.
+                 * ------------------------------------------------------
+                 */
+
+                tx = EE_Emul_Read(ee_address);
+
+
+                /*
+                 * Move address forward immediately.
+                 *
+                 * Therefore the next SPI transfer will return
+                 * address + 1, not the same byte again.
+                 */
+                ee_address =
+                    (ee_address + 1u) &
+                    (EE_MEMORY_SIZE - 1u);
+
+
+                state = EE_STATE_READ;
+            }
+            else if (ee_cmd == EE_CMD_WRITE)
+            {
+                state = EE_STATE_WRITE;
+
+                tx = 0x00;
+            }
+            else
+            {
+                state = EE_STATE_WAIT_COMMAND;
+
+                tx = 0x00;
+            }
+
+            break;
+
+
+        /*
+         * ==============================================================
+         * READ
+         * ==============================================================
+         */
+
+        case EE_STATE_READ:
+
+            /*
+             * The byte currently being received from MOSI is irrelevant
+             * for a normal EEPROM READ.
+             *
+             * We prepare the NEXT EEPROM byte.
+             */
+            tx = EE_Emul_Read(ee_address);
+
+
+            /*
+             * Sequential read.
+             *
+             * 25LC320 wraps around at the end of the address space.
+             */
+            ee_address =
+                (ee_address + 1u) &
+                (EE_MEMORY_SIZE - 1u);
+
+            break;
+
+
+        /*
+         * ==============================================================
+         * WRITE
+         * ==============================================================
+         */
+
+        case EE_STATE_WRITE:
+
+            EE_Emul_Write(ee_address, rx);
+
+
+            ee_address =
+                (ee_address + 1u) &
+                (EE_MEMORY_SIZE - 1u);
+
+
+            /*
+             * During WRITE MISO is not important.
+             */
+            tx = 0x00;
+
+            break;
+
+
+        default:
+
             state = EE_STATE_WAIT_COMMAND;
-        }
 
-        return tx;
+            tx = 0x00;
 
-
-    case EE_STATE_WRITE:
-
-        EE_Emul_Write(ee_address, rx);
-
-        ee_address =
-            (ee_address + 1u) &
-            (EE_MEMORY_SIZE - 1u);
-
-        ee_data_index++;
-
-        return 0x00;
-
-
-    default:
-
-        state = EE_STATE_WAIT_COMMAND;
-        return 0x00;
+            break;
     }
+
+
+    return tx;
 }
+
+
+/*
+ * --------------------------------------------------------------------------
+ * Background processing
+ * --------------------------------------------------------------------------
+ */
 
 void EE_Emul_Process(void)
 {
+    /*
+     * Nothing required.
+     *
+     * EEPROM SPI communication is handled entirely from SPI RX interrupt.
+     */
 }
