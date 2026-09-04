@@ -150,12 +150,7 @@ void Ee_Pin_Changed(void)
 
         if (active_device == DEV_EEPROM_ACTIVE)
         {
-            /*
-             * HLP off.
-             */
-            LL_GPIO_ResetOutputPin(HLP_GPIO_Port,
-                                    HLP_Pin);
-
+        	LL_GPIO_SetOutputPin(HLP_GPIO_Port, HLP_Pin);
 
             EE_Emul_CS_Deactivate();
 
@@ -180,7 +175,7 @@ void Ee_Pin_Changed(void)
          */
         if (active_device == DEV_ADC_ACTIVE)
         {
-            AD7794_Emu_CS_Deactivate();
+            //AD7794_Emu_CS_Deactivate();
 
             cb_push('.');
 
@@ -194,8 +189,7 @@ void Ee_Pin_Changed(void)
         /*
          * HLP indicates EEPROM active.
          */
-        LL_GPIO_SetOutputPin(HLP_GPIO_Port,
-                             HLP_Pin);
+        LL_GPIO_ResetOutputPin(HLP_GPIO_Port, HLP_Pin);
 
 
         /*
@@ -265,25 +259,9 @@ uint8_t mpc5_update_spi(uint8_t data)
 
     if (active_device == DEV_EEPROM_ACTIVE)
     {
-        /*
-         * Get byte for NEXT SPI transfer.
-         */
         tx = EE_Emul_SPI_RxTx(data);
-
-
-        /*
-         * IMPORTANT:
-         *
-         * Put the byte into SPI TX immediately.
-         *
-         * The master will use it on the next 8 clocks.
-         */
-        if (LL_SPI_IsActiveFlag_TXE(SPI1))
-        {
-            LL_SPI_TransmitData8(SPI1, tx);
-        }
-
-
+        while(!LL_SPI_IsActiveFlag_TXE(SPI1));
+        LL_SPI_TransmitData8(SPI1, tx);
         return tx;
     }
 
@@ -349,31 +327,11 @@ int main(void)
 
     /* USER CODE BEGIN 2 */
 
-    /*
-     * Enable SPI.
-     */
+    LL_GPIO_SetOutputPin(HLP_GPIO_Port, HLP_Pin);
+
     LL_SPI_Enable(SPI1);
-
-
-    /*
-     * Initialize ADC emulator.
-     */
-    AD7794_Emu_Init();
-
-
-    /*
-     * Initialize EEPROM emulator.
-     */
+    //AD7794_Emu_Init();
     EE_Emul_Init();
-
-
-    /*
-     * HLP inactive.
-     */
-    LL_GPIO_ResetOutputPin(HLP_GPIO_Port,
-                           HLP_Pin);
-
-
     /* USER CODE END 2 */
 
 
@@ -386,14 +344,14 @@ int main(void)
         /*
          * ADC background processing.
          */
-        AD7794_Emu_Process();
+        //AD7794_Emu_Process();
 
 
         /*
          * EEPROM currently has no background processing,
          * but keeping the call makes the architecture consistent.
          */
-        EE_Emul_Process();
+        //EE_Emul_Process();
 
 
         /*
@@ -401,9 +359,7 @@ int main(void)
          */
         if (cb_pop(&cb))
         {
-            LL_GPIO_TogglePin(LD2_GPIO_Port,
-                              LD2_Pin);
-
+            LL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
             SEND_CHAR_USART2(cb);
         }
     }

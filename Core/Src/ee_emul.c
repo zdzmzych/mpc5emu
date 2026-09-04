@@ -100,10 +100,8 @@ static void PA6_As_MISO(void)
  */
 static void EE_PrepareTx(uint8_t value)
 {
-    if (LL_SPI_IsActiveFlag_TXE(SPI1))
-    {
-        LL_SPI_TransmitData8(SPI1, value);
-    }
+    while (!LL_SPI_IsActiveFlag_TXE(SPI1));
+    LL_SPI_TransmitData8(SPI1, value);
 }
 
 
@@ -169,46 +167,16 @@ void EE_Emul_Init(void)
 
 void EE_Emul_CS_Activate(void)
 {
-    /*
-     * EEPROM selected.
-     */
     ee_cs_active = true;
-
     state = EE_STATE_WAIT_COMMAND;
-
     ee_cmd = 0;
     ee_address = 0;
 
-
-    /*
-     * Remove anything left by previous SPI transaction.
-     */
     EE_SPI_ClearPending();
-
-
-    /*
-     * PA6 becomes MISO.
-     */
     PA6_As_MISO();
-
-
-    /*
-     * The master is about to send the command.
-     *
-     * We MUST have something already in TX register.
-     *
-     * The first received byte (command) therefore gets 0x00
-     * on MISO.
-     */
     EE_PrepareTx(0x00);
-
-
-    /*
-     * Receive SPI bytes through interrupt.
-     */
     LL_SPI_EnableIT_RXNE(SPI1);
 }
-
 
 /*
  * --------------------------------------------------------------------------
@@ -244,14 +212,6 @@ void EE_Emul_CS_Deactivate(void)
  * EEPROM direct access
  * --------------------------------------------------------------------------
  */
-
-uint8_t EE_Emul_Read(uint16_t address)
-{
-    return eeprom_memory[
-        address & (EE_MEMORY_SIZE - 1u)
-    ];
-}
-
 
 void EE_Emul_Write(uint16_t address, uint8_t value)
 {
@@ -306,7 +266,7 @@ uint8_t EE_Emul_SPI_RxTx(uint8_t rx)
                 /*
                  * Response to command byte.
                  */
-                tx = 0x00;
+                tx = 0xa5;
             }
             else if (rx == EE_CMD_WRITE)
             {
@@ -345,7 +305,7 @@ uint8_t EE_Emul_SPI_RxTx(uint8_t rx)
 
             state = EE_STATE_WAIT_ADDR_L;
 
-            tx = 0x00;
+            tx = 0xa6;
 
             break;
 
@@ -378,7 +338,7 @@ uint8_t EE_Emul_SPI_RxTx(uint8_t rx)
                  * ------------------------------------------------------
                  */
 
-                tx = EE_Emul_Read(ee_address);
+                tx = eeprom_memory[ee_address & (EE_MEMORY_SIZE - 1u)];
 
 
                 /*
@@ -424,7 +384,7 @@ uint8_t EE_Emul_SPI_RxTx(uint8_t rx)
              *
              * We prepare the NEXT EEPROM byte.
              */
-            tx = EE_Emul_Read(ee_address);
+            tx = eeprom_memory[ee_address & (EE_MEMORY_SIZE - 1u)];
 
 
             /*
