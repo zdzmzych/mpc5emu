@@ -143,70 +143,41 @@ void Ee_Pin_Changed(void)
     if (LL_GPIO_IsInputPinSet(CS_EE_GPIO_Port, CS_EE_Pin))
     {
         /*
-         * ------------------------------------------------------------
-         * CS EEPROM HIGH
-         * ------------------------------------------------------------
+         * CS HIGH
          */
 
         if (active_device == DEV_EEPROM_ACTIVE)
         {
-        	LL_GPIO_SetOutputPin(HLP_GPIO_Port, HLP_Pin);
+            LL_GPIO_SetOutputPin(HLP_GPIO_Port, HLP_Pin);
 
             EE_Emul_CS_Deactivate();
 
             active_device = DEV_IDLE;
 
-            /*
-             * Debug marker.
-             */
             cb_push(';');
         }
     }
     else
     {
         /*
-         * ------------------------------------------------------------
-         * CS EEPROM LOW
-         * ------------------------------------------------------------
+         * CS LOW
          */
 
-        /*
-         * If ADC was active, terminate it.
-         */
         if (active_device == DEV_ADC_ACTIVE)
         {
-            //AD7794_Emu_CS_Deactivate();
-
             cb_push('.');
-
             active_device = DEV_IDLE;
         }
 
-
         active_device = DEV_EEPROM_ACTIVE;
 
-
-        /*
-         * HLP indicates EEPROM active.
-         */
         LL_GPIO_ResetOutputPin(HLP_GPIO_Port, HLP_Pin);
 
-
-        /*
-         * Debug marker.
-         */
         cb_push('E');
 
-
-        /*
-         * Initialize EEPROM SPI transaction.
-         *
-         * This also preloads the first dummy byte into TX.
-         */
         EE_Emul_CS_Activate();
     }
 }
-
 
 /*
  * ============================================================================
@@ -223,56 +194,85 @@ void Ee_Pin_Changed(void)
 
 uint8_t mpc5_update_spi(uint8_t data)
 {
-    uint8_t tx = 0x00;
+    uint8_t tx = 0xFF;
 
-
-    /*
-     * Debug:
-     *
-     * Store received MOSI byte.
-     */
-    cb_push(data);
-
-
-    /*
-     * ------------------------------------------------------------
-     * ADC
-     * ------------------------------------------------------------
-     */
-
-    if (active_device == DEV_ADC_ACTIVE)
+    if (!LL_GPIO_IsInputPinSet(CS_EE_GPIO_Port, CS_EE_Pin))
     {
+        cb_push('E');
+        cb_push(data);
         /*
-         * AD7794 emulator prepares the next TX byte itself.
+         * EEPROM is physically selected.
+         *
+         * If EXTI has not activated it yet, activate it now.
+         *
+         * EE_Emul_CS_Activate() does NOT clear RXNE,
+         * so 'data' remains the first byte of the transaction.
          */
-        AD7794_Emu_SPI_RxTxCplt(data);
+        if (active_device != DEV_EEPROM_ACTIVE)
+        {
+            active_device = DEV_EEPROM_ACTIVE;
 
-        return tx;
-    }
+            LL_GPIO_ResetOutputPin(HLP_GPIO_Port, HLP_Pin);
 
+            EE_Emul_CS_Activate();
+        }
 
-    /*
-     * ------------------------------------------------------------
-     * EEPROM
-     * ------------------------------------------------------------
-     */
-
-    if (active_device == DEV_EEPROM_ACTIVE)
-    {
+        /*
+         * Process the byte which was actually received.
+         *
+         * Returned value is for the NEXT SPI transfer.
+         */
         tx = EE_Emul_SPI_RxTx(data);
-        while(!LL_SPI_IsActiveFlag_TXE(SPI1));
-        LL_SPI_TransmitData8(SPI1, tx);
+        /*
+         * MISO during command/address phase is don't-care.
+         * 0xFF is a good dummy value for the emulator.
+         */
+        if (LL_SPI_IsActiveFlag_TXE(SPI1))
+        {
+            LL_SPI_TransmitData8(SPI1, tx);
+        }
         return tx;
+    }
+    else
+    {
+    	LL_GPIO_SetOutputPin(HLP_GPIO_Port, HLP_Pin);
     }
 
 
     /*
-     * ------------------------------------------------------------
-     * No active device
-     * ------------------------------------------------------------
+     * ==============================================================
+     * ADC
+     * ==============================================================
      */
+    if (!LL_GPIO_IsInputPinSet(CS_ADC_GPIO_Port, CS_ADC_Pin))
+    {
+        cb_push('A');
+        cb_push(data);
 
-    return 0x00;
+        if (active_device != DEV_ADC_ACTIVE)
+        {
+            active_device = DEV_ADC_ACTIVE;
+
+            //AD7794_Emu_CS_Activate();
+        }
+
+        /*
+         * AD7794 emulator currently prepares TX itself.
+         */
+        //AD7794_Emu_SPI_RxTxCplt(data);
+
+        return 0xFF;
+    }
+
+
+    /*
+     * ==============================================================
+     * No device selected
+     * ==============================================================
+     */
+    //active_device = DEV_IDLE;
+
+    return 0xFF;
 }
 
 
@@ -327,11 +327,19 @@ int main(void)
 
     /* USER CODE BEGIN 2 */
 
+    //AD7794_Emu_Init();
+    EE_Emul_Init();
+
     LL_GPIO_SetOutputPin(HLP_GPIO_Port, HLP_Pin);
 
     LL_SPI_Enable(SPI1);
-    //AD7794_Emu_Init();
-    EE_Emul_Init();
+
+    if (LL_SPI_IsActiveFlag_TXE(SPI1))
+    {
+        LL_SPI_TransmitData8(SPI1, 0xFF);
+    }
+
+    LL_SPI_EnableIT_RXNE(SPI1);
     /* USER CODE END 2 */
 
 

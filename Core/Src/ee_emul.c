@@ -104,27 +104,6 @@ static void EE_PrepareTx(uint8_t value)
     LL_SPI_TransmitData8(SPI1, value);
 }
 
-
-/*
- * Clear stale RX / overrun state.
- *
- * This is especially important when CS changes between devices.
- */
-static void EE_SPI_ClearPending(void)
-{
-    if (LL_SPI_IsActiveFlag_RXNE(SPI1))
-    {
-        (void)LL_SPI_ReceiveData8(SPI1);
-    }
-
-    if (LL_SPI_IsActiveFlag_OVR(SPI1))
-    {
-        (void)LL_SPI_ReceiveData8(SPI1);
-        (void)SPI1->SR;
-    }
-}
-
-
 /*
  * --------------------------------------------------------------------------
  * EEPROM initialization
@@ -172,10 +151,7 @@ void EE_Emul_CS_Activate(void)
     ee_cmd = 0;
     ee_address = 0;
 
-    EE_SPI_ClearPending();
     PA6_As_MISO();
-    EE_PrepareTx(0x00);
-    LL_SPI_EnableIT_RXNE(SPI1);
 }
 
 /*
@@ -192,18 +168,6 @@ void EE_Emul_CS_Deactivate(void)
 
     ee_cmd = 0;
     ee_address = 0;
-
-
-    /*
-     * No EEPROM RX processing while CS is inactive.
-     */
-    LL_SPI_DisableIT_RXNE(SPI1);
-
-
-    /*
-     * Clear possible RX/OVR left by the last transfer.
-     */
-    EE_SPI_ClearPending();
 }
 
 
@@ -238,8 +202,7 @@ void EE_Emul_Write(uint16_t address, uint8_t value)
 
 uint8_t EE_Emul_SPI_RxTx(uint8_t rx)
 {
-    uint8_t tx = 0x00;
-
+    uint8_t tx = 0xff;
 
     if (!ee_cs_active)
     {
@@ -266,7 +229,7 @@ uint8_t EE_Emul_SPI_RxTx(uint8_t rx)
                 /*
                  * Response to command byte.
                  */
-                tx = 0xa5;
+                tx = 0xff;
             }
             else if (rx == EE_CMD_WRITE)
             {
@@ -305,7 +268,7 @@ uint8_t EE_Emul_SPI_RxTx(uint8_t rx)
 
             state = EE_STATE_WAIT_ADDR_L;
 
-            tx = 0xa6;
+            tx = 0xff;
 
             break;
 

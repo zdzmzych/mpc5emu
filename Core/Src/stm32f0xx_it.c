@@ -163,7 +163,7 @@ void EXTI0_1_IRQHandler(void)
   {
     LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_1);
     /* USER CODE BEGIN LL_EXTI_LINE_1 */
-    Ee_Pin_Changed();
+    //Ee_Pin_Changed();
     /* USER CODE END LL_EXTI_LINE_1 */
   }
   /* USER CODE BEGIN EXTI0_1_IRQn 1 */
@@ -176,22 +176,47 @@ void EXTI0_1_IRQHandler(void)
   */
 void SPI1_IRQHandler(void)
 {
-  /* USER CODE BEGIN SPI1_IRQn 0 */
-    // Sprawdzenie, czy bufor odbiorczy nie jest pusty i czy przerwanie jest włączone
-    if (LL_SPI_IsActiveFlag_RXNE(SPI1) && LL_SPI_IsEnabledIT_RXNE(SPI1))
+    if (LL_SPI_IsActiveFlag_RXNE(SPI1) &&
+        LL_SPI_IsEnabledIT_RXNE(SPI1))
     {
-        uint8_t received_byte = LL_SPI_ReceiveData8(SPI1);
-        mpc5_update_spi(received_byte);
-        if (LL_SPI_IsActiveFlag_OVR(SPI1))
+        uint8_t received_byte;
+        uint8_t transmit_byte;
+
+        /*
+         * Read received SPI byte FIRST.
+         *
+         * This clears RXNE.
+         */
+        received_byte = LL_SPI_ReceiveData8(SPI1);
+
+        /*
+         * Process the byte and get the value
+         * which must be transmitted during the NEXT
+         * SPI transfer.
+         */
+        transmit_byte = mpc5_update_spi(received_byte);
+
+        /*
+         * Load next TX byte.
+         *
+         * We should normally have TXE here because the
+         * previous byte has just completed.
+         */
+        if (LL_SPI_IsActiveFlag_TXE(SPI1))
         {
-            (void)LL_SPI_ReceiveData8(SPI1);
-            (void)SPI1->SR;
+            LL_SPI_TransmitData8(SPI1, transmit_byte);
         }
     }
-  /* USER CODE END SPI1_IRQn 0 */
-  /* USER CODE BEGIN SPI1_IRQn 1 */
 
-  /* USER CODE END SPI1_IRQn 1 */
+
+    /*
+     * Clear overrun if necessary.
+     */
+    if (LL_SPI_IsActiveFlag_OVR(SPI1))
+    {
+        (void)LL_SPI_ReceiveData8(SPI1);
+        (void)SPI1->SR;
+    }
 }
 
 /* USER CODE BEGIN 1 */
