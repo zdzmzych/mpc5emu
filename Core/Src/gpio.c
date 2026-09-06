@@ -122,7 +122,7 @@ void MX_GPIO_Init(void)
   LL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
-  NVIC_SetPriority(EXTI0_1_IRQn, 0);
+  NVIC_SetPriority(EXTI0_1_IRQn, 1);
   NVIC_EnableIRQ(EXTI0_1_IRQn);
 
 }

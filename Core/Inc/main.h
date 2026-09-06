@@ -48,7 +48,13 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
+typedef enum
+{
+    DEV_IDLE = 0,
+    DEV_EEPROM_ACTIVE,
+    DEV_ADC_ACTIVE
 
+} ActiveDevice_t;
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/

@@ -22,6 +22,8 @@
 #include "stm32f0xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "ee_emul.h"
+#include "CircularBuffer.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -46,6 +48,7 @@
 volatile uint8_t spi_rx_buffer[SPI_RX_BUFFER_SIZE];
 volatile uint16_t spi_rx_index = 0;
 volatile uint8_t spi_rx_complete = 0;
+extern volatile ActiveDevice_t active_device;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -163,7 +166,7 @@ void EXTI0_1_IRQHandler(void)
   {
     LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_1);
     /* USER CODE BEGIN LL_EXTI_LINE_1 */
-    //Ee_Pin_Changed();
+    Ee_Pin_Changed();
     /* USER CODE END LL_EXTI_LINE_1 */
   }
   /* USER CODE BEGIN EXTI0_1_IRQn 1 */
@@ -176,46 +179,96 @@ void EXTI0_1_IRQHandler(void)
   */
 void SPI1_IRQHandler(void)
 {
-    if (LL_SPI_IsActiveFlag_RXNE(SPI1) &&
-        LL_SPI_IsEnabledIT_RXNE(SPI1))
+    uint8_t rx;
+    uint8_t tx;
+
+    if (LL_SPI_IsActiveFlag_RXNE(SPI1))
     {
-        uint8_t received_byte;
-        uint8_t transmit_byte;
+        /*
+         * FIRST:
+         * Read received byte immediately.
+         */
+        rx = LL_SPI_ReceiveData8(SPI1);
 
         /*
-         * Read received SPI byte FIRST.
-         *
-         * This clears RXNE.
+         * EEPROM selected?
          */
-        received_byte = LL_SPI_ReceiveData8(SPI1);
-
-        /*
-         * Process the byte and get the value
-         * which must be transmitted during the NEXT
-         * SPI transfer.
-         */
-        transmit_byte = mpc5_update_spi(received_byte);
-
-        /*
-         * Load next TX byte.
-         *
-         * We should normally have TXE here because the
-         * previous byte has just completed.
-         */
-        if (LL_SPI_IsActiveFlag_TXE(SPI1))
+        if (!LL_GPIO_IsInputPinSet(CS_EE_GPIO_Port, CS_EE_Pin))
         {
-            LL_SPI_TransmitData8(SPI1, transmit_byte);
+            /*
+             * If CS went LOW before EXTI was serviced,
+             * initialize EEPROM state here.
+             */
+            if (active_device != DEV_EEPROM_ACTIVE)
+            {
+                active_device = DEV_EEPROM_ACTIVE;
+                EE_Emul_CS_Activate();
+            }
+
+            /*
+             * IMPORTANT:
+             *
+             * Process RX and prepare TX immediately.
+             */
+            tx = EE_Emul_SPI_RxTx(rx);
+
+            /*
+             * IMPORTANT:
+             *
+             * Put TX byte directly into SPI DR.
+             */
+            if (LL_SPI_IsActiveFlag_TXE(SPI1))
+            {
+                LL_SPI_TransmitData8(SPI1, tx);
+            }
+
+            cb_push('E');
+            cb_push(rx);
+        }
+        else if (!LL_GPIO_IsInputPinSet(CS_ADC_GPIO_Port, CS_ADC_Pin))
+        {
+            /*
+             * ADC
+             */
+            cb_push('A');
+            cb_push(rx);
+
+            /*
+             * Currently ADC TX handling is disabled.
+             */
+            if (active_device != DEV_ADC_ACTIVE)
+            {
+                active_device = DEV_ADC_ACTIVE;
+            }
+
+            /*
+             * Keep previous behavior.
+             */
+            if (LL_SPI_IsActiveFlag_TXE(SPI1))
+            {
+                LL_SPI_TransmitData8(SPI1, 0xFF);
+            }
+        }
+        else
+        {
+            /*
+             * No device selected.
+             */
+            if (LL_SPI_IsActiveFlag_TXE(SPI1))
+            {
+                LL_SPI_TransmitData8(SPI1, 0xFF);
+            }
         }
     }
 
-
     /*
-     * Clear overrun if necessary.
+     * Clear OVR.
      */
     if (LL_SPI_IsActiveFlag_OVR(SPI1))
     {
         (void)LL_SPI_ReceiveData8(SPI1);
         (void)SPI1->SR;
+        cb_push('!');
     }
 }
 

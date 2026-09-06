@@ -12,8 +12,12 @@
  */
 #define EE_MEMORY_SIZE             0x1000u
 
-#define EE_CMD_WRITE               0x02u
-#define EE_CMD_READ                0x03u
+#define EE_CMD_WREN  0x06  // Write Enable
+#define EE_CMD_WRDI  0x04  // Write Disable
+#define EE_CMD_RDSR  0x05  // Read Status Register
+#define EE_CMD_WRSR  0x01  // Write Status Register
+#define EE_CMD_READ  0x03  // Read Data
+#define EE_CMD_WRITE 0x02  // Write Data
 
 /*
  * EEPROM SPI states.
@@ -67,6 +71,7 @@ static volatile EE_StateInternal_t state;
  * Current EEPROM command/address.
  */
 static volatile uint8_t  ee_cmd;
+static volatile uint8_t  ee_status;
 static volatile uint16_t ee_address;
 static volatile bool     ee_cs_active;
 
@@ -86,22 +91,6 @@ static void PA6_As_MISO(void)
     LL_GPIO_SetPinMode(GPIOA,
                        LL_GPIO_PIN_6,
                        LL_GPIO_MODE_ALTERNATE);
-}
-
-
-/*
- * Put byte into SPI TX register.
- *
- * IMPORTANT:
- *
- * This function is called AFTER a received byte has been processed,
- * therefore the value prepared here will be transmitted during the
- * NEXT SPI transfer.
- */
-static void EE_PrepareTx(uint8_t value)
-{
-    while (!LL_SPI_IsActiveFlag_TXE(SPI1));
-    LL_SPI_TransmitData8(SPI1, value);
 }
 
 /*
@@ -133,6 +122,7 @@ void EE_Emul_Init(void)
     state = EE_STATE_WAIT_COMMAND;
 
     ee_cmd = 0;
+    ee_status = 0;
     ee_address = 0;
     ee_cs_active = false;
 }
@@ -177,12 +167,7 @@ void EE_Emul_CS_Deactivate(void)
  * --------------------------------------------------------------------------
  */
 
-void EE_Emul_Write(uint16_t address, uint8_t value)
-{
-    eeprom_memory[
-        address & (EE_MEMORY_SIZE - 1u)
-    ] = value;
-}
+
 
 
 /*
@@ -280,41 +265,14 @@ uint8_t EE_Emul_SPI_RxTx(uint8_t rx)
          */
 
         case EE_STATE_WAIT_ADDR_L:
-
             ee_address |= rx;
-
-            /*
-             * 25LC320 has 12-bit address.
-             */
-            ee_address &=
-                (EE_MEMORY_SIZE - 1u);
-
-
+            ee_address &= (EE_MEMORY_SIZE - 1u);
             if (ee_cmd == EE_CMD_READ)
             {
-                /*
-                 * ------------------------------------------------------
-                 * THIS IS THE IMPORTANT FIX.
-                 *
-                 * The first EEPROM byte must be placed into TX NOW,
-                 * before the master starts the next clock.
-                 * ------------------------------------------------------
-                 */
-
                 tx = eeprom_memory[ee_address & (EE_MEMORY_SIZE - 1u)];
-
-
-                /*
-                 * Move address forward immediately.
-                 *
-                 * Therefore the next SPI transfer will return
-                 * address + 1, not the same byte again.
-                 */
                 ee_address =
-                    (ee_address + 1u) &
-                    (EE_MEMORY_SIZE - 1u);
-
-
+                		(ee_address + 1u) &
+						(EE_MEMORY_SIZE - 1u);
                 state = EE_STATE_READ;
             }
             else if (ee_cmd == EE_CMD_WRITE)
@@ -323,10 +281,21 @@ uint8_t EE_Emul_SPI_RxTx(uint8_t rx)
 
                 tx = 0x00;
             }
+            else if (ee_cmd == EE_CMD_WREN)
+            {
+            	ee_status |= 0x02;
+                state = EE_STATE_WAIT_COMMAND;
+                tx = 0x00;
+            }
+            else if (ee_cmd == EE_CMD_WRDI)
+            {
+            	ee_status &= ~0x02;
+                state = EE_STATE_WAIT_COMMAND;
+                tx = 0x00;
+            }
             else
             {
                 state = EE_STATE_WAIT_COMMAND;
-
                 tx = 0x00;
             }
 
@@ -369,18 +338,10 @@ uint8_t EE_Emul_SPI_RxTx(uint8_t rx)
          */
 
         case EE_STATE_WRITE:
-
-            EE_Emul_Write(ee_address, rx);
-
-
-            ee_address =
-                (ee_address + 1u) &
-                (EE_MEMORY_SIZE - 1u);
-
-
-            /*
-             * During WRITE MISO is not important.
-             */
+       	    eeprom_memory[ee_address & (EE_MEMORY_SIZE - 1u)] = rx;
+       	    if(ee_address == (EE_MEMORY_SIZE - 1u))
+       	    	break;
+            ee_address = (ee_address + 1u) & (EE_MEMORY_SIZE - 1u);
             tx = 0x00;
 
             break;

@@ -30,13 +30,7 @@
 
 /* USER CODE BEGIN PTD */
 
-typedef enum
-{
-    DEV_IDLE = 0,
-    DEV_EEPROM_ACTIVE,
-    DEV_ADC_ACTIVE
 
-} ActiveDevice_t;
 
 /* USER CODE END PTD */
 
@@ -194,56 +188,6 @@ void Ee_Pin_Changed(void)
 
 uint8_t mpc5_update_spi(uint8_t data)
 {
-    uint8_t tx = 0xFF;
-
-    if (!LL_GPIO_IsInputPinSet(CS_EE_GPIO_Port, CS_EE_Pin))
-    {
-        cb_push('E');
-        cb_push(data);
-        /*
-         * EEPROM is physically selected.
-         *
-         * If EXTI has not activated it yet, activate it now.
-         *
-         * EE_Emul_CS_Activate() does NOT clear RXNE,
-         * so 'data' remains the first byte of the transaction.
-         */
-        if (active_device != DEV_EEPROM_ACTIVE)
-        {
-            active_device = DEV_EEPROM_ACTIVE;
-
-            LL_GPIO_ResetOutputPin(HLP_GPIO_Port, HLP_Pin);
-
-            EE_Emul_CS_Activate();
-        }
-
-        /*
-         * Process the byte which was actually received.
-         *
-         * Returned value is for the NEXT SPI transfer.
-         */
-        tx = EE_Emul_SPI_RxTx(data);
-        /*
-         * MISO during command/address phase is don't-care.
-         * 0xFF is a good dummy value for the emulator.
-         */
-        if (LL_SPI_IsActiveFlag_TXE(SPI1))
-        {
-            LL_SPI_TransmitData8(SPI1, tx);
-        }
-        return tx;
-    }
-    else
-    {
-    	LL_GPIO_SetOutputPin(HLP_GPIO_Port, HLP_Pin);
-    }
-
-
-    /*
-     * ==============================================================
-     * ADC
-     * ==============================================================
-     */
     if (!LL_GPIO_IsInputPinSet(CS_ADC_GPIO_Port, CS_ADC_Pin))
     {
         cb_push('A');
@@ -252,25 +196,10 @@ uint8_t mpc5_update_spi(uint8_t data)
         if (active_device != DEV_ADC_ACTIVE)
         {
             active_device = DEV_ADC_ACTIVE;
-
-            //AD7794_Emu_CS_Activate();
         }
-
-        /*
-         * AD7794 emulator currently prepares TX itself.
-         */
-        //AD7794_Emu_SPI_RxTxCplt(data);
 
         return 0xFF;
     }
-
-
-    /*
-     * ==============================================================
-     * No device selected
-     * ==============================================================
-     */
-    //active_device = DEV_IDLE;
 
     return 0xFF;
 }
