@@ -278,22 +278,7 @@ int main(void)
 
     while (1)
     {
-        /*
-         * ADC background processing.
-         */
-        //AD7794_Emu_Process();
-
-
-        /*
-         * EEPROM currently has no background processing,
-         * but keeping the call makes the architecture consistent.
-         */
-        //EE_Emul_Process();
-
-
-        /*
-         * Send debug data through USART2.
-         */
+        AD7794_Emu_Process();
         if (cb_pop(&cb))
         {
             LL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);

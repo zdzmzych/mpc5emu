@@ -23,6 +23,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "ee_emul.h"
+#include "ad7794_emu.h"
 #include "CircularBuffer.h"
 /* USER CODE END Includes */
 
@@ -43,7 +44,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
-#define SPI_RX_BUFFER_SIZE 16 // Twoje 'N'
+#define SPI_RX_BUFFER_SIZE 16
 
 volatile uint8_t spi_rx_buffer[SPI_RX_BUFFER_SIZE];
 volatile uint16_t spi_rx_index = 0;
@@ -152,26 +153,7 @@ void SysTick_Handler(void)
   */
 void EXTI0_1_IRQHandler(void)
 {
-  /* USER CODE BEGIN EXTI0_1_IRQn 0 */
 
-  /* USER CODE END EXTI0_1_IRQn 0 */
-  if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_0) != RESET)
-  {
-    LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_0);
-    /* USER CODE BEGIN LL_EXTI_LINE_0 */
-    //Adc_Pin_Changed();
-    /* USER CODE END LL_EXTI_LINE_0 */
-  }
-  if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_1) != RESET)
-  {
-    LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_1);
-    /* USER CODE BEGIN LL_EXTI_LINE_1 */
-    Ee_Pin_Changed();
-    /* USER CODE END LL_EXTI_LINE_1 */
-  }
-  /* USER CODE BEGIN EXTI0_1_IRQn 1 */
-
-  /* USER CODE END EXTI0_1_IRQn 1 */
 }
 
 /**
@@ -180,80 +162,20 @@ void EXTI0_1_IRQHandler(void)
 void SPI1_IRQHandler(void)
 {
     uint8_t rx;
-    uint8_t tx;
 
     if (LL_SPI_IsActiveFlag_RXNE(SPI1))
     {
-        /*
-         * FIRST:
-         * Read received byte immediately.
-         */
         rx = LL_SPI_ReceiveData8(SPI1);
-
-        /*
-         * EEPROM selected?
-         */
         if (!LL_GPIO_IsInputPinSet(CS_EE_GPIO_Port, CS_EE_Pin))
         {
-            /*
-             * If CS went LOW before EXTI was serviced,
-             * initialize EEPROM state here.
-             */
-            if (active_device != DEV_EEPROM_ACTIVE)
-            {
-                active_device = DEV_EEPROM_ACTIVE;
-                EE_Emul_CS_Activate();
-            }
-
-            /*
-             * IMPORTANT:
-             *
-             * Process RX and prepare TX immediately.
-             */
-            tx = EE_Emul_SPI_RxTx(rx);
-
-            /*
-             * IMPORTANT:
-             *
-             * Put TX byte directly into SPI DR.
-             */
-            if (LL_SPI_IsActiveFlag_TXE(SPI1))
-            {
-                LL_SPI_TransmitData8(SPI1, tx);
-            }
-
-            cb_push('E');
-            cb_push(rx);
+            EE_Emul_SPI_RxTx(rx);
         }
         else if (!LL_GPIO_IsInputPinSet(CS_ADC_GPIO_Port, CS_ADC_Pin))
         {
-            /*
-             * ADC
-             */
-            cb_push('A');
-            cb_push(rx);
-
-            /*
-             * Currently ADC TX handling is disabled.
-             */
-            if (active_device != DEV_ADC_ACTIVE)
-            {
-                active_device = DEV_ADC_ACTIVE;
-            }
-
-            /*
-             * Keep previous behavior.
-             */
-            if (LL_SPI_IsActiveFlag_TXE(SPI1))
-            {
-                LL_SPI_TransmitData8(SPI1, 0xFF);
-            }
+        	AD7794_Emul_SPI_RxTx(rx);
         }
         else
         {
-            /*
-             * No device selected.
-             */
             if (LL_SPI_IsActiveFlag_TXE(SPI1))
             {
                 LL_SPI_TransmitData8(SPI1, 0xFF);

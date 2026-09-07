@@ -82,17 +82,6 @@ static volatile bool     ee_cs_active;
  * --------------------------------------------------------------------------
  */
 
-
-/*
- * PA6 = SPI1_MISO
- */
-static void PA6_As_MISO(void)
-{
-    LL_GPIO_SetPinMode(GPIOA,
-                       LL_GPIO_PIN_6,
-                       LL_GPIO_MODE_ALTERNATE);
-}
-
 /*
  * --------------------------------------------------------------------------
  * EEPROM initialization
@@ -136,12 +125,7 @@ void EE_Emul_Init(void)
 
 void EE_Emul_CS_Activate(void)
 {
-    ee_cs_active = true;
-    state = EE_STATE_WAIT_COMMAND;
-    ee_cmd = 0;
-    ee_address = 0;
 
-    PA6_As_MISO();
 }
 
 /*
@@ -167,199 +151,93 @@ void EE_Emul_CS_Deactivate(void)
  * --------------------------------------------------------------------------
  */
 
-
-
-
-/*
- * --------------------------------------------------------------------------
- * SPI RX/TX
- *
- * VERY IMPORTANT:
- *
- * This function is called AFTER one complete SPI byte has been received.
- *
- * Therefore the value returned from this function is NOT the byte that
- * was just received.
- *
- * It is the byte that must be put into TX for the NEXT SPI transfer.
- * --------------------------------------------------------------------------
- */
-
-uint8_t EE_Emul_SPI_RxTx(uint8_t rx)
+void EE_Emul_SPI_RxTx(uint8_t rx)
 {
-    uint8_t tx = 0xff;
-
     if (!ee_cs_active)
     {
-        return 0xFF;
+        ee_cs_active = true;
+        state = EE_STATE_WAIT_COMMAND;
+        ee_cmd = 0;
+        LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_6, LL_GPIO_MODE_ALTERNATE);
+        LL_SPI_TransmitData8(SPI1, 0xff);
     }
-
 
     switch (state)
     {
-        /*
-         * ==============================================================
-         * COMMAND
-         * ==============================================================
-         */
-
         case EE_STATE_WAIT_COMMAND:
 
             if (rx == EE_CMD_READ)
             {
                 ee_cmd = EE_CMD_READ;
-
                 state = EE_STATE_WAIT_ADDR_H;
-
-                /*
-                 * Response to command byte.
-                 */
-                tx = 0xff;
+                LL_SPI_TransmitData8(SPI1, 0xff);
             }
             else if (rx == EE_CMD_WRITE)
             {
                 ee_cmd = EE_CMD_WRITE;
-
                 state = EE_STATE_WAIT_ADDR_H;
-
-                /*
-                 * Response to command byte.
-                 */
-                tx = 0x00;
+                LL_SPI_TransmitData8(SPI1, 0xff);
             }
             else
             {
-                /*
-                 * Invalid command.
-                 */
                 state = EE_STATE_WAIT_COMMAND;
-
-                tx = 0x00;
+                LL_SPI_TransmitData8(SPI1, 0xff);
             }
-
             break;
-
-
-        /*
-         * ==============================================================
-         * ADDRESS HIGH
-         * ==============================================================
-         */
 
         case EE_STATE_WAIT_ADDR_H:
-
-            ee_address =
-                ((uint16_t)rx << 8);
-
+            ee_address = ((uint16_t)rx << 8);
             state = EE_STATE_WAIT_ADDR_L;
-
-            tx = 0xff;
-
+            LL_SPI_TransmitData8(SPI1, 0xff);
             break;
-
-
-        /*
-         * ==============================================================
-         * ADDRESS LOW
-         * ==============================================================
-         */
 
         case EE_STATE_WAIT_ADDR_L:
             ee_address |= rx;
             ee_address &= (EE_MEMORY_SIZE - 1u);
             if (ee_cmd == EE_CMD_READ)
             {
-                tx = eeprom_memory[ee_address & (EE_MEMORY_SIZE - 1u)];
-                ee_address =
-                		(ee_address + 1u) &
-						(EE_MEMORY_SIZE - 1u);
+                LL_SPI_TransmitData8(SPI1, eeprom_memory[ee_address & (EE_MEMORY_SIZE - 1u)]);
+                ee_address = (ee_address + 1u) & (EE_MEMORY_SIZE - 1u);
                 state = EE_STATE_READ;
             }
             else if (ee_cmd == EE_CMD_WRITE)
             {
                 state = EE_STATE_WRITE;
-
-                tx = 0x00;
             }
             else if (ee_cmd == EE_CMD_WREN)
             {
             	ee_status |= 0x02;
                 state = EE_STATE_WAIT_COMMAND;
-                tx = 0x00;
             }
             else if (ee_cmd == EE_CMD_WRDI)
             {
             	ee_status &= ~0x02;
                 state = EE_STATE_WAIT_COMMAND;
-                tx = 0x00;
             }
             else
             {
                 state = EE_STATE_WAIT_COMMAND;
-                tx = 0x00;
             }
-
+            LL_SPI_TransmitData8(SPI1, 0xff);
             break;
-
-
-        /*
-         * ==============================================================
-         * READ
-         * ==============================================================
-         */
 
         case EE_STATE_READ:
-
-            /*
-             * The byte currently being received from MOSI is irrelevant
-             * for a normal EEPROM READ.
-             *
-             * We prepare the NEXT EEPROM byte.
-             */
-            tx = eeprom_memory[ee_address & (EE_MEMORY_SIZE - 1u)];
-
-
-            /*
-             * Sequential read.
-             *
-             * 25LC320 wraps around at the end of the address space.
-             */
-            ee_address =
-                (ee_address + 1u) &
-                (EE_MEMORY_SIZE - 1u);
-
+        	LL_SPI_TransmitData8(SPI1, eeprom_memory[ee_address & (EE_MEMORY_SIZE - 1u)]);
+            ee_address = (ee_address + 1u) & (EE_MEMORY_SIZE - 1u);
             break;
-
-
-        /*
-         * ==============================================================
-         * WRITE
-         * ==============================================================
-         */
 
         case EE_STATE_WRITE:
        	    eeprom_memory[ee_address & (EE_MEMORY_SIZE - 1u)] = rx;
-       	    if(ee_address == (EE_MEMORY_SIZE - 1u))
-       	    	break;
+            LL_SPI_TransmitData8(SPI1, 0xff);
             ee_address = (ee_address + 1u) & (EE_MEMORY_SIZE - 1u);
-            tx = 0x00;
-
             break;
-
 
         default:
-
             state = EE_STATE_WAIT_COMMAND;
-
-            tx = 0x00;
-
+            LL_SPI_TransmitData8(SPI1, 0xff);
             break;
     }
-
-
-    return tx;
 }
-
 
 /*
  * --------------------------------------------------------------------------

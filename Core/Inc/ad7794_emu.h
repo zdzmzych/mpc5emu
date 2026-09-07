@@ -187,7 +187,7 @@ void AD7794_Emu_CS_Deactivate(void);
  * Wywoływane z SPI1_IRQHandler() po odebraniu bajtu.
  * ============================================================ */
 
-void AD7794_Emu_SPI_RxTxCplt(uint8_t data);
+void AD7794_Emul_SPI_RxTx(uint8_t data);
 
 void AD7794_Emu_SPI_Error(void);
 
