@@ -1,6 +1,6 @@
 #include "CircularBuffer.h"
 
-#define BUFFER_SIZE 128 // Musi być potęgą dwójki (2, 4, 8, 16, 32, 64, 128, 256...)
+#define BUFFER_SIZE 1024 // Musi być potęgą dwójki (2, 4, 8, 16, 32, 64, 128, 256...)
 #define BUFFER_MASK (BUFFER_SIZE - 1)
 
 uint8_t data[BUFFER_SIZE];

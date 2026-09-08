@@ -185,13 +185,13 @@ void SPI1_IRQHandler(void)
 
     /*
      * Clear OVR.
-     */
     if (LL_SPI_IsActiveFlag_OVR(SPI1))
     {
         (void)LL_SPI_ReceiveData8(SPI1);
         (void)SPI1->SR;
         cb_push('!');
     }
+    */
 }
 
 /* USER CODE BEGIN 1 */

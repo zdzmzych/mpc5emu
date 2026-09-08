@@ -282,7 +282,7 @@ int main(void)
         if (cb_pop(&cb))
         {
             LL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-            SEND_CHAR_USART2(cb);
+            //SEND_CHAR_USART2(cb);
         }
     }
 }

@@ -1,4 +1,5 @@
 #include "ad7794_emu.h"
+#include "CircularBuffer.h"
 #include <string.h>
 
 /* ============================================================
@@ -87,6 +88,7 @@ static void SPI_PrepareTx(uint8_t data)
     if (LL_SPI_IsActiveFlag_TXE(SPI1))
     {
         LL_SPI_TransmitData8(SPI1, data);
+        //cb_push('A');cb_push(data);
     }
 }
 
@@ -679,6 +681,7 @@ void AD7794_Emu_Init(void)
 void AD7794_Emu_Process(void)
 {
     uint32_t now;
+    return;
 
     if (!ad7794.cs_active)
         return;
@@ -803,7 +806,6 @@ void AD7794_Emul_SPI_RxTx(uint8_t data)
         ad7794.cs_active = true;
         ad7794.spi_state = AD7794_SPI_WAIT_COMM;
         SPI_PrepareTx(0xff);
-
         ad7794.bytes_to_xfer = 0;
         ad7794.byte_idx = 0;
         ad7794.reset_one_bits = 0;
