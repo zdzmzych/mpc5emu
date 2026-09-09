@@ -153,7 +153,39 @@ void SysTick_Handler(void)
   */
 void EXTI0_1_IRQHandler(void)
 {
+    /* CS_ADC - EXTI line 0 */
+    if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_0))
+    {
+        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_0);
 
+        if (LL_GPIO_IsInputPinSet(CS_ADC_GPIO_Port, CS_ADC_Pin))
+        {
+            /* CS_ADC = HIGH -> koniec transakcji AD7794 */
+            AD7794_Emu_CS_Deactivate();
+        }
+        else
+        {
+            /* CS_ADC = LOW -> początek transakcji AD7794 */
+            //AD7794_Emu_CS_Activate();
+        }
+    }
+
+    /* CS_EE - EXTI line 1 */
+    if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_1))
+    {
+        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_1);
+
+        if (LL_GPIO_IsInputPinSet(CS_EE_GPIO_Port, CS_EE_Pin))
+        {
+            /* CS_EE = HIGH -> koniec transakcji EEPROM */
+            EE_Emul_CS_Deactivate();
+        }
+        else
+        {
+            /* CS_EE = LOW -> początek transakcji EEPROM */
+            //EE_Emul_CS_Activate();
+        }
+    }
 }
 
 /**
