@@ -201,10 +201,12 @@ void SPI1_IRQHandler(void)
         if (!LL_GPIO_IsInputPinSet(CS_EE_GPIO_Port, CS_EE_Pin))
         {
             EE_Emul_SPI_RxTx(rx);
+            cb_push('e');cb_push(rx);
         }
         else if (!LL_GPIO_IsInputPinSet(CS_ADC_GPIO_Port, CS_ADC_Pin))
         {
         	AD7794_Emul_SPI_RxTx(rx);
+        	cb_push('a');cb_push(rx);
         }
         else
         {

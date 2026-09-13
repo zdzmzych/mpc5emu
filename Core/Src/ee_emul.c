@@ -1,5 +1,6 @@
 #include "main.h"
 #include "ee_emul.h"
+#include "CircularBuffer.h"
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -97,16 +98,9 @@ void EE_Emul_Init(void)
            0xFF,
            sizeof(eeprom_memory));
 
-
-    /*
-     * Load the existing EEPROM image.
-     *
-     * KEEP YOUR EXISTING eeprom_default_image[].
-     */
     memcpy(eeprom_memory,
            eeprom_default_image,
            sizeof(eeprom_default_image));
-
 
     state = EE_STATE_WAIT_COMMAND;
 
@@ -137,11 +131,10 @@ void EE_Emul_CS_Activate(void)
 void EE_Emul_CS_Deactivate(void)
 {
     ee_cs_active = false;
-
     state = EE_STATE_WAIT_COMMAND;
-
     ee_cmd = 0;
     ee_address = 0;
+    cb_push('E');
 }
 
 
@@ -158,8 +151,8 @@ void EE_Emul_SPI_RxTx(uint8_t rx)
         ee_cs_active = true;
         state = EE_STATE_WAIT_COMMAND;
         ee_cmd = 0;
-        LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_6, LL_GPIO_MODE_ALTERNATE);
         LL_SPI_TransmitData8(SPI1, 0xff);
+        LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_6, LL_GPIO_MODE_ALTERNATE);
     }
 
     switch (state)

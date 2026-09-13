@@ -74,7 +74,7 @@ extern "C" {
  * AD7794 ID on known silicon = 0x4F
  * ============================================================ */
 
-#define AD7794_DEFAULT_STATUS    0x88u
+#define AD7794_DEFAULT_STATUS    0x80u
 #define AD7794_DEFAULT_MODE      0x000Au
 #define AD7794_DEFAULT_CONFIG    0x0710u
 #define AD7794_DEFAULT_ID        0x4Fu
@@ -158,8 +158,6 @@ typedef struct
     bool cs_active;
 
 } AD7794_Emu_t;
-
-extern AD7794_Emu_t ad7794;
 
 /* ============================================================
  * API

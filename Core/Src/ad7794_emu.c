@@ -8,6 +8,7 @@
  * ============================================================ */
 
 AD7794_Emu_t ad7794;
+int spicnt = 0;
 
 
 /* ============================================================
@@ -23,6 +24,9 @@ AD7794_Emu_t ad7794;
 
 static void PA6_As_RDY(void)
 {
+	if (LL_GPIO_IsInputPinSet(CS_ADC_GPIO_Port, CS_ADC_Pin))
+		return;
+
     LL_GPIO_SetPinMode(GPIOA,
                        LL_GPIO_PIN_6,
                        LL_GPIO_MODE_OUTPUT);
@@ -34,6 +38,9 @@ static void PA6_As_RDY(void)
 
 static void PA6_RDY_Low(void)
 {
+	if (LL_GPIO_IsInputPinSet(CS_ADC_GPIO_Port, CS_ADC_Pin))
+		return;
+
     LL_GPIO_SetPinMode(GPIOA,
                        LL_GPIO_PIN_6,
                        LL_GPIO_MODE_OUTPUT);
@@ -45,6 +52,9 @@ static void PA6_RDY_Low(void)
 
 static void PA6_RDY_High(void)
 {
+	if (LL_GPIO_IsInputPinSet(CS_ADC_GPIO_Port, CS_ADC_Pin))
+		return;
+
     LL_GPIO_SetPinMode(GPIOA,
                        LL_GPIO_PIN_6,
                        LL_GPIO_MODE_OUTPUT);
@@ -56,6 +66,9 @@ static void PA6_RDY_High(void)
 
 static void PA6_As_MISO(void)
 {
+	if (LL_GPIO_IsInputPinSet(CS_ADC_GPIO_Port, CS_ADC_Pin))
+		return;
+
     LL_GPIO_SetPinMode(GPIOA,
                        LL_GPIO_PIN_6,
                        LL_GPIO_MODE_ALTERNATE);
@@ -318,21 +331,15 @@ static void process_communications_register(uint8_t comm)
 
     ad7794.reset_one_bits = 0;
 
-
     /*
      * WEN must be zero for a valid communication command.
      */
     if (comm & AD7794_COMM_WEN)
     {
         ad7794.spi_state = AD7794_SPI_WAIT_COMM;
+        SPI_PrepareTx(0xFF);
         ad7794.bytes_to_xfer = 0;
         ad7794.byte_idx = 0;
-
-        PA6_As_RDY();
-        update_rdy_pin();
-
-        SPI_PrepareTx(0xFF);
-
         return;
     }
 
@@ -358,103 +365,46 @@ static void process_communications_register(uint8_t comm)
         ad7794.next_reg == AD7794_REG_DATA &&
         ad7794.cread)
     {
-        ad7794.spi_state =
-            AD7794_SPI_CREAD_WAIT;
+        ad7794.spi_state = AD7794_SPI_CREAD_WAIT;
+        SPI_PrepareTx(0xFF);
 
         ad7794.bytes_to_xfer = 3;
         ad7794.byte_idx = 0;
-
-        /*
-         * Data is not yet ready.
-         */
         PA6_RDY_High();
-
-        /*
-         * No data is put on MISO yet.
-         *
-         * The master must wait for RDY LOW.
-         */
-        SPI_PrepareTx(0xFF);
-        cb_push('A');cb_push(comm);
-
         return;
     }
 
-
-    /*
-     * Normal READ.
-     */
     if (ad7794.is_read)
     {
         prepare_tx_buffer();
 
         if (ad7794.bytes_to_xfer != 0)
         {
-            ad7794.spi_state =
-                AD7794_SPI_READ;
-
-            /*
-             * Switch PA6 from RDY to MISO
-             * BEFORE the next SCLK.
-             */
+            ad7794.spi_state = AD7794_SPI_READ;
             PA6_As_MISO();
-
-            /*
-             * First response byte must already be
-             * present before the master clocks it.
-             */
             SPI_PrepareTx(ad7794.tx_buf[0]);
         }
         else
         {
-            ad7794.spi_state =
-                AD7794_SPI_WAIT_COMM;
-
-            PA6_As_RDY();
-
+            ad7794.spi_state = AD7794_SPI_WAIT_COMM;
             SPI_PrepareTx(0xFF);
+            PA6_As_RDY();
         }
-
         return;
     }
 
 
-    /*
-     * Normal WRITE.
-     */
-    ad7794.bytes_to_xfer =
-        get_write_length(ad7794.next_reg);
-
+    ad7794.bytes_to_xfer = get_write_length(ad7794.next_reg);
     ad7794.byte_idx = 0;
-
-    memset(ad7794.rx_buf,
-           0,
-           sizeof(ad7794.rx_buf));
-
 
     if (ad7794.bytes_to_xfer != 0)
     {
-        ad7794.spi_state =
-            AD7794_SPI_WRITE;
-
-        /*
-         * During write DOUT/RDY remains RDY.
-         */
-        PA6_As_RDY();
-        update_rdy_pin();
-
-        /*
-         * Dummy response.
-         */
+        ad7794.spi_state = AD7794_SPI_WRITE;
         SPI_PrepareTx(0xFF);
     }
     else
     {
-        ad7794.spi_state =
-            AD7794_SPI_WAIT_COMM;
-
-        PA6_As_RDY();
-
+        ad7794.spi_state = AD7794_SPI_WAIT_COMM;
         SPI_PrepareTx(0xFF);
     }
 }
@@ -597,16 +547,14 @@ static void finish_write(void)
     process_write_data();
 
 
-    ad7794.spi_state =
-        AD7794_SPI_WAIT_COMM;
+    ad7794.spi_state = AD7794_SPI_WAIT_COMM;
 
     ad7794.bytes_to_xfer = 0;
     ad7794.byte_idx = 0;
 
 
-    PA6_As_RDY();
-    update_rdy_pin();
-
+    //PA6_As_RDY();
+    //update_rdy_pin();
 
     SPI_PrepareTx(0xFF);
 }
@@ -705,7 +653,7 @@ void AD7794_Emu_Reset(void)
         AD7794_DEFAULT_CONFIG;
 
     ad7794.data =
-        0x123456u;
+        0x11000012;
 
     ad7794.id =
         AD7794_DEFAULT_ID;
@@ -744,15 +692,7 @@ void AD7794_Emu_Reset(void)
            0,
            sizeof(ad7794.rx_buf));
 
-
     ad7794.data_ready = false;
-
-
-    if (ad7794.cs_active)
-    {
-        PA6_As_RDY();
-        update_rdy_pin();
-    }
 }
 
 
@@ -783,27 +723,13 @@ void AD7794_Emu_Init(void)
 
     AD7794_Emu_Reset();
 
-
-    /*
-     * Initial test conversion value.
-     */
-    AD7794_Emu_SetData(0x123456u);
-
-
-    /*
-     * Emulator conversion period.
-     *
-     * This is intentionally configurable.
-     */
     ad7794.conversion_period_ms =
         50u;
-
 
     ad7794.last_conversion_tick =
         HAL_GetTick();
 
-
-    PA6_RDY_High();
+    //PA6_RDY_High();
 }
 
 
@@ -815,6 +741,7 @@ void AD7794_Emu_Process(void)
 {
     uint32_t now;
     uint8_t mode;
+    return;
 
 
     if (!ad7794.cs_active)
@@ -824,8 +751,7 @@ void AD7794_Emu_Process(void)
     now = HAL_GetTick();
 
 
-    if ((uint32_t)(now -
-                   ad7794.last_conversion_tick) <
+    if ((uint32_t)(now - ad7794.last_conversion_tick) <
         ad7794.conversion_period_ms)
     {
         return;
@@ -835,9 +761,7 @@ void AD7794_Emu_Process(void)
     /*
      * Keep conversion timer running.
      */
-    ad7794.last_conversion_tick =
-        now;
-
+    ad7794.last_conversion_tick = now;
 
     /*
      * MD2:MD0
@@ -847,8 +771,7 @@ void AD7794_Emu_Process(void)
      * 010 = idle
      * 011 = power-down
      */
-    mode =
-        (uint8_t)((ad7794.mode >> 13) & 0x07u);
+    mode = (uint8_t)((ad7794.mode >> 13) & 0x07u);
 
 
     /*
@@ -974,7 +897,7 @@ void AD7794_Emu_CS_Activate(void)
     /*
      * The SPI IRQ is needed while ADC CS is active.
      */
-    LL_SPI_EnableIT_RXNE(SPI1);
+    //LL_SPI_EnableIT_RXNE(SPI1);
 
 
     /*
@@ -993,45 +916,8 @@ void AD7794_Emu_CS_Activate(void)
 
 void AD7794_Emu_CS_Deactivate(void)
 {
-    /*
-     * CS HIGH terminates the complete ADC transaction.
-     */
+	cb_push('A');
     ad7794.cs_active = false;
-
-
-    ad7794.spi_state =
-        AD7794_SPI_WAIT_COMM;
-
-    ad7794.bytes_to_xfer = 0;
-    ad7794.byte_idx = 0;
-
-    ad7794.next_reg = 0;
-    ad7794.is_read = 0;
-    ad7794.cread = 0;
-
-
-    ad7794.data_ready = false;
-    ad7794.reset_one_bits = 0;
-
-
-    /*
-     * No ADC SPI RX interrupt while ADC CS is HIGH.
-     *
-     * EEPROM CS activation will enable RXNE again.
-     */
-    //LL_SPI_DisableIT_RXNE(SPI1);
-
-
-    /*
-     * Clear possible stale RX/OVR state.
-     */
-    SPI_ClearPending();
-
-
-    /*
-     * DOUT/RDY inactive.
-     */
-    PA6_RDY_High();
 }
 
 
@@ -1043,105 +929,43 @@ void AD7794_Emu_CS_Deactivate(void)
 
 void AD7794_Emul_SPI_RxTx(uint8_t data)
 {
-    /*
-     * Normally CS activation is handled by EXTI.
-     *
-     * This fallback is intentionally kept because the master
-     * can start clocking almost immediately after CS LOW.
-     *
-     * It does NOT preload an extra byte beyond the normal
-     * first response.
-     */
     if (!ad7794.cs_active)
     {
         ad7794.cs_active = true;
-
-        ad7794.spi_state =
-            AD7794_SPI_WAIT_COMM;
-
+        ad7794.spi_state = AD7794_SPI_WAIT_COMM;
+        SPI_PrepareTx(0xFF);
         ad7794.bytes_to_xfer = 0;
         ad7794.byte_idx = 0;
-
         ad7794.reset_one_bits = 0;
         ad7794.cread = 0;
-
         PA6_As_RDY();
-
-        //LL_SPI_EnableIT_RXNE(SPI1);
     }
-
 
     /* ========================================================
      * WAIT FOR COMMUNICATION REGISTER
      * ======================================================== */
 
-    if (ad7794.spi_state ==
-            AD7794_SPI_WAIT_COMM)
+    if (ad7794.spi_state == AD7794_SPI_WAIT_COMM)
     {
-        /*
-         * 32 consecutive '1' bits reset the interface.
-         *
-         * Four 0xFF bytes = 32 bits.
-         */
         if (data == 0xFFu)
         {
+            SPI_PrepareTx(0xFF);
             ad7794.reset_one_bits += 8u;
-
-
-            if (ad7794.reset_one_bits >=
-                AD7794_RESET_BITS)
+            if (ad7794.reset_one_bits >= AD7794_RESET_BITS)
             {
                 AD7794_Emu_Reset();
-
-                /*
-                 * Reset does not terminate CS.
-                 */
                 ad7794.cs_active = true;
-
-
-                PA6_As_RDY();
-
-
-                /*
-                 * Response to the last reset byte.
-                 */
-                SPI_PrepareTx(0xFF);
-
                 return;
             }
-
-
-            SPI_PrepareTx(0xFF);
-
             return;
         }
 
-
-        /*
-         * Any other byte terminates the reset sequence.
-         */
-        ad7794.reset_one_bits = 0;
-
-
         process_communications_register(data);
-
-
-        /*
-         * CREAD:
-         *
-         * Wait for conversion / RDY LOW.
-         */
-        if (ad7794.spi_state ==
-                AD7794_SPI_CREAD_WAIT)
+        if (ad7794.spi_state == AD7794_SPI_CREAD_WAIT)
         {
             PA6_As_RDY();
             update_rdy_pin();
-
-            /*
-             * Nothing is being read yet.
-             */
             SPI_PrepareTx(0xFF);
-
             return;
         }
 
@@ -1149,8 +973,7 @@ void AD7794_Emul_SPI_RxTx(uint8_t data)
         /*
          * Normal READ already loaded first TX byte.
          */
-        if (ad7794.spi_state ==
-                AD7794_SPI_READ)
+        if (ad7794.spi_state == AD7794_SPI_READ)
         {
             return;
         }
@@ -1159,9 +982,9 @@ void AD7794_Emul_SPI_RxTx(uint8_t data)
         /*
          * WRITE already prepared dummy TX.
          */
-        if (ad7794.spi_state ==
-                AD7794_SPI_WRITE)
+        if (ad7794.spi_state == AD7794_SPI_WRITE)
         {
+        	SPI_PrepareTx(0xFF);
             return;
         }
 
@@ -1179,8 +1002,7 @@ void AD7794_Emul_SPI_RxTx(uint8_t data)
      * NORMAL READ
      * ======================================================== */
 
-    if (ad7794.spi_state ==
-            AD7794_SPI_READ)
+    if (ad7794.spi_state == AD7794_SPI_READ)
     {
         /*
          * The byte just received corresponds to the
@@ -1217,8 +1039,7 @@ void AD7794_Emul_SPI_RxTx(uint8_t data)
      * NORMAL WRITE
      * ======================================================== */
 
-    if (ad7794.spi_state ==
-            AD7794_SPI_WRITE)
+    if (ad7794.spi_state == AD7794_SPI_WRITE)
     {
         /*
          * Store received byte.
