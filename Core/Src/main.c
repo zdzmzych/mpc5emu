@@ -136,40 +136,8 @@ void Ee_Pin_Changed(void)
 {
     if (LL_GPIO_IsInputPinSet(CS_EE_GPIO_Port, CS_EE_Pin))
     {
-        /*
-         * CS HIGH
-         */
-
-        if (active_device == DEV_EEPROM_ACTIVE)
-        {
-            LL_GPIO_SetOutputPin(HLP_GPIO_Port, HLP_Pin);
-
-            EE_Emul_CS_Deactivate();
-
-            active_device = DEV_IDLE;
-
-            cb_push(';');
-        }
-    }
-    else
-    {
-        /*
-         * CS LOW
-         */
-
-        if (active_device == DEV_ADC_ACTIVE)
-        {
-            cb_push('.');
-            active_device = DEV_IDLE;
-        }
-
-        active_device = DEV_EEPROM_ACTIVE;
-
-        LL_GPIO_ResetOutputPin(HLP_GPIO_Port, HLP_Pin);
-
-        cb_push('E');
-
-        EE_Emul_CS_Activate();
+    	EE_Emul_CS_Deactivate();
+        cb_push(';');
     }
 }
 

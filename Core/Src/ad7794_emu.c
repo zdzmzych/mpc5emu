@@ -105,10 +105,7 @@ static void SPI_EnableReceive(void)
 
 static void prepare_tx_buffer(void)
 {
-    memset(ad7794.tx_buf, 0xFF, sizeof(ad7794.tx_buf));
-
     ad7794.byte_idx = 0;
-
     switch (ad7794.next_reg)
     {
         case AD7794_REG_STATUS:
@@ -285,11 +282,6 @@ static void process_communications_register(uint8_t comm)
      */
 
     /*
-     * Any non-FF byte terminates the consecutive-1 reset sequence.
-     */
-    ad7794.reset_one_bits = 0;
-
-    /*
      * WEN must be 0.
      */
     if (comm & AD7794_COMM_WEN)
@@ -326,7 +318,7 @@ static void process_communications_register(uint8_t comm)
         /*
          * Wait until conversion is ready.
          */
-        PA6_RDY_High();
+        //PA6_RDY_High();
 
         return;
     }
@@ -360,15 +352,8 @@ static void process_communications_register(uint8_t comm)
     /*
      * WRITE
      */
-    ad7794.bytes_to_xfer =
-        get_write_length(ad7794.next_reg);
-
+    ad7794.bytes_to_xfer = get_write_length(ad7794.next_reg);
     ad7794.byte_idx = 0;
-
-    memset(ad7794.rx_buf,
-           0,
-           sizeof(ad7794.rx_buf));
-
     if (ad7794.bytes_to_xfer > 0)
     {
         ad7794.spi_state = AD7794_SPI_WRITE;
@@ -376,25 +361,15 @@ static void process_communications_register(uint8_t comm)
         /*
          * DOUT/RDY remains RDY during write.
          */
-        update_rdy_pin();
+        //update_rdy_pin();
 
-        /*
-         * MISO byte is irrelevant during write,
-         * but we must provide a byte for SPI.
-         */
-        SPI_PrepareTx(0x00);
 
-        SPI_EnableReceive();
     }
     else
     {
         ad7794.spi_state = AD7794_SPI_WAIT_COMM;
 
-        PA6_As_RDY();
-
-        SPI_PrepareTx(0x00);
-
-        SPI_EnableReceive();
+        //PA6_As_RDY();
     }
 }
 
@@ -447,7 +422,7 @@ static void process_write_data(void)
         case AD7794_REG_IO:
 
             ad7794.io =
-                ad7794.rx_buf[0];
+            		ad7794.rx_buf[0];
 
             break;
 
@@ -812,363 +787,56 @@ void AD7794_Emu_CS_Deactivate(void)
 {
     ad7794.cs_active = false;
 
-    ad7794.spi_state =
-        AD7794_SPI_WAIT_COMM;
+    ad7794.spi_state = AD7794_SPI_WAIT_COMM;
 
     ad7794.bytes_to_xfer = 0;
     ad7794.byte_idx = 0;
-
     ad7794.cread = 0;
-
     ad7794.data_ready = false;
 
-    /*
-     * No RX interrupt while CS is inactive.
-     */
-    LL_SPI_DisableIT_RXNE(SPI1);
-
-    /*
-     * Clear possible byte left in RX register.
-     */
-    SPI_ClearPending();
-
-    /*
-     * DOUT/RDY must be inactive/high.
-     */
-    PA6_RDY_High();
 }
 
 /* ============================================================
  * SPI RX callback
  * ============================================================ */
 
-void AD7794_Emu_SPI_RxTxCplt(uint8_t data)
+uint8_t AD7794_Emu_SPI_RxTxCplt(uint8_t data)
 {
-    /*
-     * If CS is no longer active, ignore data.
-     */
+	ad7794.spicnt++;
     if (!ad7794.cs_active)
     {
-        return;
-    }
-
-
-    /* ========================================================
-     * WAITING FOR COMMUNICATIONS REGISTER
-     * ======================================================== */
-
-    if (ad7794.spi_state ==
-            AD7794_SPI_WAIT_COMM)
-    {
-        /*
-         * AD7794 reset:
-         *
-         * >=32 consecutive SCLK cycles with DIN=1.
-         *
-         * Four bytes 0xFF are enough.
-         */
-        if (data == 0xFFu)
-        {
-            ad7794.reset_one_bits += 8u;
-
-            if (ad7794.reset_one_bits >=
-                AD7794_RESET_BITS)
-            {
-                AD7794_Emu_Reset();
-
-                /*
-                 * Keep CS state.
-                 */
-                ad7794.cs_active = true;
-
-                /*
-                 * Return to Communications Register state.
-                 */
-                ad7794.spi_state =
-                    AD7794_SPI_WAIT_COMM;
-
-                PA6_As_RDY();
-
-                SPI_PrepareTx(0x00);
-
-                SPI_EnableReceive();
-
-                return;
-            }
-
-            SPI_PrepareTx(0x00);
-
-            SPI_EnableReceive();
-
-            return;
-        }
-
-
-        /*
-         * Any other byte breaks the reset sequence.
-         */
+        ad7794.cs_active = true;
         ad7794.reset_one_bits = 0;
-
-        process_communications_register(data);
-
-        /*
-         * Continuous read does not immediately output data.
-         */
-        if (ad7794.spi_state ==
-                AD7794_SPI_CREAD_WAIT)
-        {
-            /*
-             * Wait until RDY goes low.
-             */
-            PA6_As_RDY();
-
-            /*
-             * Keep RX interrupt active.
-             *
-             * This is important because the AD7794
-             * continuously monitors DIN while in CREAD.
-             */
-            SPI_PrepareTx(0x00);
-
-            SPI_EnableReceive();
-
-            return;
-        }
-
-        /*
-         * Normal READ/WRITE have already prepared the
-         * first TX byte.
-         */
-        if (ad7794.spi_state ==
-                AD7794_SPI_READ ||
-            ad7794.spi_state ==
-                AD7794_SPI_WRITE)
-        {
-            return;
-        }
-
-        /*
-         * Invalid command.
-         */
-        SPI_PrepareTx(0x00);
-
-        SPI_EnableReceive();
-
-        return;
+        ad7794.spi_state = AD7794_SPI_WAIT_COMM;
     }
 
-
-    /* ========================================================
-     * NORMAL READ
-     * ======================================================== */
-
-    if (ad7794.spi_state ==
-            AD7794_SPI_READ)
+    if (data == 0xff)
     {
-        /*
-         * We have just received one byte.
-         */
-        ad7794.byte_idx++;
-
-        if (ad7794.byte_idx <
-            ad7794.bytes_to_xfer)
-        {
-            /*
-             * Prepare NEXT byte immediately.
-             */
-            SPI_PrepareTx(
-                ad7794.tx_buf[
-                    ad7794.byte_idx]);
-
-            SPI_EnableReceive();
-
-            return;
-        }
-
-        /*
-         * Entire register read completed.
-         */
-        finish_read();
-
-        SPI_EnableReceive();
-
-        return;
+    	ad7794.reset_one_bits++;
+    	if(ad7794.reset_one_bits >= 4)
+    	{
+    		ad7794.spi_state = AD7794_SPI_WAIT_COMM;
+    		return 0xff;
+    	}
     }
 
-
-    /* ========================================================
-     * NORMAL WRITE
-     * ======================================================== */
-
-    if (ad7794.spi_state ==
-            AD7794_SPI_WRITE)
+    ad7794.reset_one_bits = 0;
+    switch (ad7794.spi_state)
     {
-        /*
-         * Store received byte.
-         */
-        if (ad7794.byte_idx <
-            sizeof(ad7794.rx_buf))
-        {
-            ad7794.rx_buf[
-                ad7794.byte_idx] = data;
-        }
-
-        ad7794.byte_idx++;
-
-        if (ad7794.byte_idx <
-            ad7794.bytes_to_xfer)
-        {
-            /*
-             * Dummy byte during write.
-             */
-            SPI_PrepareTx(0x00);
-
-            SPI_EnableReceive();
-
-            return;
-        }
-
-        /*
-         * Write complete.
-         */
-        finish_write();
-
-        SPI_EnableReceive();
-
-        return;
+		case AD7794_SPI_WAIT_COMM:
+			process_communications_register(data);
+			break;
+		case AD7794_SPI_READ:
+			break;
+		case AD7794_SPI_WRITE:
+			process_write_data();
+			break;
+		case AD7794_SPI_CREAD_WAIT:
+			break;
+		case AD7794_SPI_CREAD_DATA:
+			break;
     }
-
-
-    /* ========================================================
-     * CONTINUOUS READ WAIT
-     * ======================================================== */
-
-    if (ad7794.spi_state ==
-            AD7794_SPI_CREAD_WAIT)
-    {
-        /*
-         * AD7794 monitors DIN while in CREAD.
-         *
-         * 0x58 is the command used to exit CREAD.
-         *
-         * We accept it here when the master sends it
-         * while RDY is low.
-         */
-        if (data == AD7794_COMM_EXIT_CREAD)
-        {
-            ad7794.cread = 0;
-
-            ad7794.spi_state =
-                AD7794_SPI_WAIT_COMM;
-
-            ad7794.bytes_to_xfer = 0;
-            ad7794.byte_idx = 0;
-
-            PA6_As_RDY();
-
-            SPI_PrepareTx(0x00);
-
-            SPI_EnableReceive();
-
-            return;
-        }
-
-        /*
-         * If conversion is ready, this byte is part of
-         * the 24-bit data transfer.
-         */
-        if (ad7794.data_ready)
-        {
-            /*
-             * First data byte was already loaded by
-             * start_cread_data().
-             */
-            ad7794.spi_state =
-                AD7794_SPI_CREAD_DATA;
-
-            ad7794.byte_idx = 1;
-
-            /*
-             * Prepare second byte.
-             */
-            if (ad7794.byte_idx <
-                ad7794.bytes_to_xfer)
-            {
-                SPI_PrepareTx(
-                    ad7794.tx_buf[
-                        ad7794.byte_idx]);
-
-                SPI_EnableReceive();
-
-                return;
-            }
-        }
-
-        /*
-         * No conversion ready.
-         */
-        SPI_PrepareTx(0x00);
-
-        SPI_EnableReceive();
-
-        return;
-    }
-
-
-    /* ========================================================
-     * CONTINUOUS READ DATA
-     * ======================================================== */
-
-    if (ad7794.spi_state ==
-            AD7794_SPI_CREAD_DATA)
-    {
-        ad7794.byte_idx++;
-
-        if (ad7794.byte_idx <
-            ad7794.bytes_to_xfer)
-        {
-            SPI_PrepareTx(
-                ad7794.tx_buf[
-                    ad7794.byte_idx]);
-
-            SPI_EnableReceive();
-
-            return;
-        }
-
-        /*
-         * 24-bit DATA completely read.
-         */
-        finish_cread_data();
-
-        /*
-         * Keep RX interrupt active so that the master can
-         * later send 0x58 to exit CREAD.
-         */
-        PA6_As_RDY();
-
-        SPI_PrepareTx(0x00);
-
-        SPI_EnableReceive();
-
-        return;
-    }
-
-
-    /*
-     * Fallback.
-     */
-    ad7794.spi_state =
-        AD7794_SPI_WAIT_COMM;
-
-    ad7794.bytes_to_xfer = 0;
-    ad7794.byte_idx = 0;
-
-    PA6_As_RDY();
-
-    SPI_PrepareTx(0x00);
-
-    SPI_EnableReceive();
+    return 0xff;
 }
 
 /* ============================================================

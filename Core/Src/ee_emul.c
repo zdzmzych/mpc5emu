@@ -39,7 +39,7 @@ typedef enum
 static uint8_t eeprom_memory[EE_MEMORY_SIZE];
 
 
-static const uint8_t eeprom_default_image[0x200] =
+static const uint8_t eeprom_default_image[] =
 {
 		0x50, 0x97, 0x5C, 0xEF, 0xC1, 0x8F, 0x05, 0x8B, 0x0E, 0x8D, 0xD8, 0xF5, 0xAE, 0x89, 0xB8, 0x09, 0x0D, 0x8A, 0xC9, 0x0A, 0x48, 0x84, 0x00, 0x00, 0x1A, 0x97, 0xAD, 0x40, 0xED, 0x91, 0xC9, 0xBE,
 		0xD2, 0x8B, 0xBA, 0x1A, 0x5E, 0x87, 0x4D, 0x03, 0x4F, 0x8A, 0xE1, 0x9C, 0x48, 0x84, 0x00, 0x00, 0x60, 0x9D, 0x00, 0xCC, 0xAA, 0x9A, 0xCD, 0x3A, 0x70, 0x93, 0xD5, 0x66, 0x31, 0x94, 0xA3, 0xA7,
@@ -59,13 +59,10 @@ static const uint8_t eeprom_default_image[0x200] =
 		0x0E, 0x4F, 0x84, 0x4C, 0x83, 0xD6, 0x7D, 0xA2, 0x4F, 0xDB, 0xC4, 0x1D, 0x63, 0x00, 0x19, 0x02, 0x1A, 0x80, 0x80, 0x02, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x04, 0xFF, 0xFF, 0x89, 0x7C,
 };
 
-
-
 /*
  * Current SPI state.
  */
 static volatile EE_StateInternal_t state;
-
 
 /*
  * Current EEPROM command/address.
@@ -144,46 +141,13 @@ void EE_Emul_CS_Activate(void)
     PA6_As_MISO();
 }
 
-/*
- * --------------------------------------------------------------------------
- * CS HIGH
- * --------------------------------------------------------------------------
- */
-
 void EE_Emul_CS_Deactivate(void)
 {
     ee_cs_active = false;
-
     state = EE_STATE_WAIT_COMMAND;
-
     ee_cmd = 0;
     ee_address = 0;
 }
-
-
-/*
- * --------------------------------------------------------------------------
- * EEPROM direct access
- * --------------------------------------------------------------------------
- */
-
-
-
-
-/*
- * --------------------------------------------------------------------------
- * SPI RX/TX
- *
- * VERY IMPORTANT:
- *
- * This function is called AFTER one complete SPI byte has been received.
- *
- * Therefore the value returned from this function is NOT the byte that
- * was just received.
- *
- * It is the byte that must be put into TX for the NEXT SPI transfer.
- * --------------------------------------------------------------------------
- */
 
 uint8_t EE_Emul_SPI_RxTx(uint8_t rx)
 {
@@ -191,9 +155,12 @@ uint8_t EE_Emul_SPI_RxTx(uint8_t rx)
 
     if (!ee_cs_active)
     {
-        return 0xFF;
+        ee_cs_active = true;
+        state = EE_STATE_WAIT_COMMAND;
+        ee_cmd = 0;
+        ee_address = 0;
+        PA6_As_MISO();
     }
-
 
     switch (state)
     {
@@ -310,14 +277,13 @@ uint8_t EE_Emul_SPI_RxTx(uint8_t rx)
 
         case EE_STATE_READ:
 
-            /*
-             * The byte currently being received from MOSI is irrelevant
-             * for a normal EEPROM READ.
-             *
-             * We prepare the NEXT EEPROM byte.
-             */
-            tx = eeprom_memory[ee_address & (EE_MEMORY_SIZE - 1u)];
+            if(ee_address > 0x6)
+       		{
+            	LL_GPIO_ResetOutputPin(HLP_GPIO_Port, HLP_Pin);
+            	tx=0;
+       		}
 
+            tx = eeprom_memory[ee_address & (EE_MEMORY_SIZE - 1u)];
 
             /*
              * Sequential read.

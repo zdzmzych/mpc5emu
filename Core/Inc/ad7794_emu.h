@@ -126,6 +126,7 @@ typedef struct
 
     /* ---------------- Communications ---------------- */
 
+    uint16_t spicnt;
     uint8_t  next_reg;
     uint8_t  is_read;
     uint8_t  cread;
@@ -138,12 +139,6 @@ typedef struct
     uint8_t  tx_buf[4];
     uint8_t  rx_buf[4];
 
-    /*
-     * Liczba kolejnych bitów '1' na DIN.
-     *
-     * AD7794 resetuje interfejs po minimum 32 kolejnych
-     * taktowanych bitach z DIN = 1.
-     */
     uint8_t reset_one_bits;
 
     /* ---------------- Conversion ---------------- */
@@ -187,7 +182,7 @@ void AD7794_Emu_CS_Deactivate(void);
  * Wywoływane z SPI1_IRQHandler() po odebraniu bajtu.
  * ============================================================ */
 
-void AD7794_Emu_SPI_RxTxCplt(uint8_t data);
+uint8_t AD7794_Emu_SPI_RxTxCplt(uint8_t data);
 
 void AD7794_Emu_SPI_Error(void);
 

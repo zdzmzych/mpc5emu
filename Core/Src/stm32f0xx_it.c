@@ -23,6 +23,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "ee_emul.h"
+#include "ad7794_emu.h"
 #include "CircularBuffer.h"
 /* USER CODE END Includes */
 
@@ -159,14 +160,23 @@ void EXTI0_1_IRQHandler(void)
   {
     LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_0);
     /* USER CODE BEGIN LL_EXTI_LINE_0 */
-    //Adc_Pin_Changed();
+    if (LL_GPIO_IsInputPinSet(CS_ADC_GPIO_Port, CS_ADC_Pin))
+    {
+    	AD7794_Emu_CS_Deactivate();
+        //cb_push(';');
+    }
+
     /* USER CODE END LL_EXTI_LINE_0 */
   }
   if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_1) != RESET)
   {
     LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_1);
     /* USER CODE BEGIN LL_EXTI_LINE_1 */
-    Ee_Pin_Changed();
+    if (LL_GPIO_IsInputPinSet(CS_EE_GPIO_Port, CS_EE_Pin))
+    {
+    	EE_Emul_CS_Deactivate();
+        //cb_push(';');
+    }
     /* USER CODE END LL_EXTI_LINE_1 */
   }
   /* USER CODE BEGIN EXTI0_1_IRQn 1 */
@@ -184,69 +194,24 @@ void SPI1_IRQHandler(void)
 
     if (LL_SPI_IsActiveFlag_RXNE(SPI1))
     {
-        /*
-         * FIRST:
-         * Read received byte immediately.
-         */
         rx = LL_SPI_ReceiveData8(SPI1);
-
-        /*
-         * EEPROM selected?
-         */
         if (!LL_GPIO_IsInputPinSet(CS_EE_GPIO_Port, CS_EE_Pin))
         {
-            /*
-             * If CS went LOW before EXTI was serviced,
-             * initialize EEPROM state here.
-             */
-            if (active_device != DEV_EEPROM_ACTIVE)
-            {
-                active_device = DEV_EEPROM_ACTIVE;
-                EE_Emul_CS_Activate();
-            }
-
-            /*
-             * IMPORTANT:
-             *
-             * Process RX and prepare TX immediately.
-             */
             tx = EE_Emul_SPI_RxTx(rx);
-
-            /*
-             * IMPORTANT:
-             *
-             * Put TX byte directly into SPI DR.
-             */
             if (LL_SPI_IsActiveFlag_TXE(SPI1))
             {
                 LL_SPI_TransmitData8(SPI1, tx);
             }
 
-            cb_push('E');
-            cb_push(rx);
+            //cb_push('e');
+            //cb_push(rx);
         }
         else if (!LL_GPIO_IsInputPinSet(CS_ADC_GPIO_Port, CS_ADC_Pin))
         {
-            /*
-             * ADC
-             */
-            cb_push('A');
-            cb_push(rx);
-
-            /*
-             * Currently ADC TX handling is disabled.
-             */
-            if (active_device != DEV_ADC_ACTIVE)
-            {
-                active_device = DEV_ADC_ACTIVE;
-            }
-
-            /*
-             * Keep previous behavior.
-             */
+        	tx = AD7794_Emu_SPI_RxTxCplt(rx);
             if (LL_SPI_IsActiveFlag_TXE(SPI1))
             {
-                LL_SPI_TransmitData8(SPI1, 0xFF);
+                LL_SPI_TransmitData8(SPI1, tx);
             }
         }
         else
