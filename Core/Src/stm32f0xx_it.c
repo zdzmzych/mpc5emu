@@ -175,7 +175,11 @@ void EXTI0_1_IRQHandler(void)
     if (LL_GPIO_IsInputPinSet(CS_EE_GPIO_Port, CS_EE_Pin))
     {
     	EE_Emul_CS_Deactivate();
-        //cb_push(';');
+        cb_push('A');
+    }
+    else
+    {
+        cb_push('a');
     }
     /* USER CODE END LL_EXTI_LINE_1 */
   }
@@ -197,22 +201,18 @@ void SPI1_IRQHandler(void)
         rx = LL_SPI_ReceiveData8(SPI1);
         if (!LL_GPIO_IsInputPinSet(CS_EE_GPIO_Port, CS_EE_Pin))
         {
+            //EE cs low
             tx = EE_Emul_SPI_RxTx(rx);
             if (LL_SPI_IsActiveFlag_TXE(SPI1))
             {
                 LL_SPI_TransmitData8(SPI1, tx);
             }
-
-            //cb_push('e');
-            //cb_push(rx);
         }
         else if (!LL_GPIO_IsInputPinSet(CS_ADC_GPIO_Port, CS_ADC_Pin))
         {
-        	tx = AD7794_Emu_SPI_RxTxCplt(rx);
-            if (LL_SPI_IsActiveFlag_TXE(SPI1))
-            {
-                LL_SPI_TransmitData8(SPI1, tx);
-            }
+        	//AD cs low
+        	AD7794_Emu_SPI_RxTxCplt(rx);
+            cb_push(rx);
         }
         else
         {

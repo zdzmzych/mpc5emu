@@ -224,7 +224,7 @@ int main(void)
 
     /* USER CODE BEGIN 2 */
 
-    //AD7794_Emu_Init();
+    AD7794_Emu_Init();
     EE_Emul_Init();
 
     LL_GPIO_SetOutputPin(HLP_GPIO_Port, HLP_Pin);
@@ -249,7 +249,7 @@ int main(void)
         /*
          * ADC background processing.
          */
-        //AD7794_Emu_Process();
+        AD7794_Emu_Process();
 
 
         /*
@@ -264,6 +264,7 @@ int main(void)
          */
         if (cb_pop(&cb))
         {
+            LL_GPIO_TogglePin(HLP_GPIO_Port, HLP_Pin);
             LL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
             SEND_CHAR_USART2(cb);
         }
