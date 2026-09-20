@@ -139,6 +139,7 @@ typedef struct
     uint8_t  tx_buf[4];
     uint8_t  rx_buf[4];
 
+    /* Consecutive 0xFF-byte counter: 4 bytes = 32 ones = serial reset. */
     uint8_t reset_one_bits;
 
     /* ---------------- Conversion ---------------- */
@@ -171,8 +172,6 @@ void AD7794_Emu_SetData(uint32_t value_24bit);
 /* ============================================================
  * Chip Select
  * ============================================================ */
-
-void AD7794_Emu_CS_Activate(void);
 
 void AD7794_Emu_CS_Deactivate(void);
 
