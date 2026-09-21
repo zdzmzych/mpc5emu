@@ -461,7 +461,7 @@ void AD7794_Emu_Init(void)
     memset(&ad7794, 0, sizeof(ad7794));
 
     ad7794.cs_active = false;
-    ad7794.conversion_period_ms = 5u;
+    ad7794.conversion_period_ms = 1u;
 
     AD7794_Emu_Reset();
 
@@ -573,7 +573,6 @@ void AD7794_Emu_SPI_RxTxCplt(uint8_t data)
 {
     if (!ad7794.cs_active)
     {
-        /* Defensive fallback; normally CS_Activate() does this first. */
         ad7794.cs_active = true;
         ad7794.spi_state = AD7794_SPI_WAIT_COMM;
     }
@@ -598,8 +597,6 @@ void AD7794_Emu_SPI_RxTxCplt(uint8_t data)
 
             ad7794.cs_active = cs;
             ad7794.conversion_period_ms = period;
-            PA6_As_RDY();
-            update_rdy_pin();
         }
         SPI_PrepareTx(0xFFu);
         return;
